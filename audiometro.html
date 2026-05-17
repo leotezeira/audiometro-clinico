@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Audiómetro">
+<title>Audiómetro Clínico Pro</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #6366f1;
+  --primary-light: #818cf8;
+  --primary-dark: #4f46e5;
+  --success: #10b981;
+  --success-light: #34d399;
+  --danger: #ef4444;
+  --danger-light: #f87171;
+  --warning: #f59e0b;
+  --info: #3b82f6;
+  --od-color: #dc2626;
+  --oi-color: #2563eb;
+  --od-mask-color: #f59e0b;
+  --oi-mask-color: #06b6d4;
+  --bg-dark: #0f172a;
+  --bg-darker: #020617;
+  --card-bg: rgba(30, 41, 59, 0.6);
+  --border: #334155;
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+}
+
+body {
+  min-height: 100vh;
+  background: linear-gradient(135deg, var(--bg-darker) 0%, #0f172a 50%, var(--bg-dark) 100%);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  color: var(--text-primary);
+  padding-bottom: 80px;
+  overflow-x: hidden;
+}
+
+/* NAVIGATION */
+.nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  background: rgba(15, 23, 42, 0.95);
+  border-top: 2px solid var(--border);
+  backdrop-filter: blur(10px);
+  z-index: 1000;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.nav-btn {
+  flex: 1;
+  padding: 12px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  border-top: 3px solid transparent;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.nav-btn:active,
+.nav-btn:focus {
+  outline: none;
+}
+
+.nav-btn.active {
+  color: var(--primary-light);
+  border-top-color: var(--primary-light);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.page {
+  display: none;
+  padding: 16px 12px 20px;
+  animation: fadeIn 0.3s ease;
+}
+
+.page.active {
+  display: block;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* HEADER */
+.header {
+  text-align: center;
+  margin-bottom: 24px;
+  padding-top: 12px;
+}
+
+.header .sub {
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--primary-light);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.header h1 {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  background: linear-gradient(135deg, var(--primary-light), var(--info));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.divider {
+  width: 80px;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--primary-light), transparent);
+  margin: 12px auto 0;
+  border-radius: 2px;
+}
+
+/* CARDS */
+.card {
+  background: var(--card-bg);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 16px;
+  margin-bottom: 14px;
+  max-width: 100%;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  border-color: var(--primary-light);
+  box-shadow: 0 8px 25px rgba(99, 102, 241, 0.1);
+}
+
+.card-title {
+  font-size: 12px;
+  color: var(--primary-light);
+  letter-spacing: 2px;
+  margin-bottom: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* FORM */
+.form-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.form-group {
+  flex: 1;
+  min-width: 140px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 12px;
+  color: var(--primary-light);
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  transition: all 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--primary-light);
+  background: rgba(99, 102, 241, 0.05);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.form-group select option {
+  background: var(--bg-dark);
+  color: var(--text-primary);
+}
+
+/* BUTTONS */
+.btn {
+  padding: 11px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  font-family: inherit;
+  transition: all 0.3s ease;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.btn-primary:active,
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+}
+
+.btn-success {
+  background: linear-gradient(135deg, var(--success), #059669);
+  color: white;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.btn-success:active,
+.btn-success:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, var(--danger), #dc2626);
+  color: white;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.btn-danger:active,
+.btn-danger:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+/* OÍD SELECTOR */
+.oido-sel {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.oido-btn {
+  padding: 10px 20px;
+  border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-family: inherit;
+  transition: all 0.3s ease;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.oido-btn.od {
+  color: var(--od-color);
+}
+
+.oido-btn.od.active {
+  border-color: var(--od-color);
+  background: rgba(220, 38, 38, 0.15);
+  box-shadow: 0 0 20px rgba(220, 38, 38, 0.2);
+}
+
+.oido-btn.oi {
+  color: var(--oi-color);
+}
+
+.oido-btn.oi.active {
+  border-color: var(--oi-color);
+  background: rgba(37, 99, 235, 0.15);
+  box-shadow: 0 0 20px rgba(37, 99, 235, 0.2);
+}
+
+/* FREQUENCY SELECTOR */
+.freqs {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+}
+
+.freq-btn {
+  padding: 8px 14px;
+  border: 2px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  font-family: inherit;
+  transition: all 0.3s ease;
+  min-height: 40px;
+}
+
+.freq-btn.active {
+  border-color: var(--primary-light);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(59, 130, 246, 0.2));
+  color: var(--primary-light);
+}
+
+/* DB SLIDER */
+.db-display {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -1px;
+}
+
+.db-unit {
+  font-size: 14px;
+  color: var(--primary-light);
+  font-weight: 600;
+}
+
+.db-level-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+input[type=range] {
+  width: 100%;
+  height: 6px;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(90deg, var(--bg-dark), var(--primary), var(--danger));
+  border-radius: 5px;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  border: 3px solid var(--primary);
+  transition: all 0.2s;
+}
+
+input[type=range]::-webkit-slider-thumb:active {
+  width: 28px;
+  height: 28px;
+}
+
+input[type=range]::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  border: 3px solid var(--primary);
+  transition: all 0.2s;
+}
+
+.range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  font-weight: 600;
+}
+
+/* MASKING CONTROL */
+.mask-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.mask-toggle {
+  position: relative;
+  width: 48px;
+  height: 28px;
+}
+
+.mask-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.mask-slider-ui {
+  position: absolute;
+  inset: 0;
+  background: #475569;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.mask-slider-ui:before {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  left: 4px;
+  top: 4px;
+  background: white;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.mask-toggle input:checked + .mask-slider-ui {
+  background: linear-gradient(135deg, var(--warning), #f59e0b);
+}
+
+.mask-toggle input:checked + .mask-slider-ui:before {
+  transform: translateX(20px);
+}
+
+.mask-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.mask-db {
+  font-size: 14px;
+  color: var(--warning);
+  margin-left: auto;
+  font-weight: 700;
+}
+
+/* CLASSIFICATION */
+.clasif-badge {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 8px;
+  letter-spacing: 0.5px;
+}
+
+.clasif-normal {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--success-light);
+  border: 1px solid var(--success);
+}
+
+.clasif-leve {
+  background: rgba(168, 162, 16, 0.2);
+  color: #e8e025;
+  border: 1px solid #d4af37;
+}
+
+.clasif-moderada {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+  border: 1px solid var(--warning);
+}
+
+.clasif-severa {
+  background: rgba(234, 88, 12, 0.2);
+  color: #fb923c;
+  border: 1px solid #ea580c;
+}
+
+.clasif-profunda {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--danger-light);
+  border: 1px solid var(--danger);
+}
+
+/* MESSAGES */
+.mensaje {
+  text-align: center;
+  color: var(--success-light);
+  font-size: 13px;
+  margin-bottom: 12px;
+  letter-spacing: 0.5px;
+  min-height: 20px;
+  font-weight: 600;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* HISTORY */
+.session-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.session-card:active {
+  transform: scale(0.98);
+}
+
+.session-card:hover {
+  border-color: var(--primary-light);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.session-card .sc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 10px;
+}
+
+.session-card .sc-name {
+  font-size: 15px;
+  color: var(--text-primary);
+  font-weight: 700;
+  flex: 1;
+}
+
+.session-card .sc-date {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.session-card .sc-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.session-card .sc-badge {
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+
+.no-sessions {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 40px 20px;
+}
+
+/* AUDIOGRAM */
+.audiogram-wrap {
+  background: var(--card-bg);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 14px 10px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  backdrop-filter: blur(10px);
+}
+
+.audiogram-title {
+  font-size: 12px;
+  color: var(--primary-light);
+  letter-spacing: 2px;
+  text-align: center;
+  margin-bottom: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+svg {
+  display: block;
+  margin: 0 auto;
+}
+
+.legend {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 12px;
+  flex-wrap: wrap;
+  font-weight: 600;
+}
+
+/* LOGO INPUT */
+.logo-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-family: inherit;
+  margin-bottom: 14px;
+  transition: all 0.3s ease;
+}
+
+.logo-input:focus {
+  outline: none;
+  border-color: var(--primary-light);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.logo-btns-row {
+  display: flex;
+  gap: 10px;
+}
+
+.logo-btns-row .btn {
+  flex: 1;
+}
+
+/* SUMMARY GRID */
+.resumen-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.resumen-item {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.resumen-item:hover {
+  border-color: var(--primary-light);
+  transform: translateY(-2px);
+}
+
+.resumen-item .ri-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.resumen-item .ri-val {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--primary-light);
+}
+
+.footer-note {
+  text-align: center;
+  padding: 18px;
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+/* RESPONSIVE */
+@media (max-width: 640px) {
+  body {
+    padding-bottom: 90px;
+  }
+
+  .page {
+    padding: 12px 10px 20px;
+  }
+
+  .header {
+    margin-bottom: 18px;
+  }
+
+  .header h1 {
+    font-size: 22px;
+  }
+
+  .card {
+    padding: 14px;
+  }
+
+  .btn {
+    font-size: 12px;
+    padding: 10px 16px;
+  }
+
+  .resumen-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nav-btn {
+    font-size: 10px;
+  }
+
+  svg {
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+@media (max-width: 360px) {
+  .header h1 {
+    font-size: 20px;
+  }
+
+  .db-display {
+    font-size: 32px;
+  }
+
+  .btn {
+    font-size: 11px;
+    padding: 9px 14px;
+  }
+
+  .oido-btn {
+    padding: 8px 16px;
+    font-size: 12px;
+  }
+
+  .freqs {
+    gap: 6px;
+  }
+
+  .freq-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- NAVIGATION -->
+<nav class="nav">
+  <button class="nav-btn active" onclick="goPage('pg-paciente')" title="Datos del paciente">
+    <span style="font-size:18px">👤</span>
+    <span>Paciente</span>
+  </button>
+  <button class="nav-btn" onclick="goPage('pg-tonal')" title="Audiometría tonal">
+    <span style="font-size:18px">🎵</span>
+    <span>Tonal</span>
+  </button>
+  <button class="nav-btn" onclick="goPage('pg-logo')" title="Logoaudiometría">
+    <span style="font-size:18px">🗣️</span>
+    <span>Logo</span>
+  </button>
+  <button class="nav-btn" onclick="goPage('pg-resultado')" title="Resumen de resultados">
+    <span style="font-size:18px">📊</span>
+    <span>Resultado</span>
+  </button>
+  <button class="nav-btn" onclick="goPage('pg-historial')" title="Historial de sesiones">
+    <span style="font-size:18px">🗂️</span>
+    <span>Historial</span>
+  </button>
+</nav>
+
+<!-- PAGE: PATIENT DATA -->
+<div id="pg-paciente" class="page active">
+  <div class="header">
+    <div class="sub">📋 Evaluación Auditiva</div>
+    <h1>Audiómetro Clínico Pro</h1>
+    <div class="divider"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">👤 Datos del Paciente</div>
+    <div class="form-row">
+      <div class="form-group" style="flex:2">
+        <label>Nombre Completo</label>
+        <input type="text" id="pac-nombre" placeholder="Apellido, Nombre">
+      </div>
+      <div class="form-group">
+        <label>Edad</label>
+        <input type="number" id="pac-edad" placeholder="Años" min="0" max="120">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Nº Historia Clínica</label>
+        <input type="text" id="pac-hc" placeholder="HC-0000">
+      </div>
+      <div class="form-group">
+        <label>Fecha</label>
+        <input type="date" id="pac-fecha">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Motivo de Consulta</label>
+        <input type="text" id="pac-motivo" placeholder="Hipoacusia, control, etc.">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Observaciones</label>
+        <input type="text" id="pac-obs" placeholder="Antecedentes relevantes...">
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-success" onclick="iniciarSesion()">▶ Iniciar Evaluación</button>
+    <button class="btn btn-danger" onclick="limpiarSesion()">↻ Nueva Sesión</button>
+  </div>
+  <div class="mensaje" id="msg-paciente"></div>
+</div>
+
+<!-- PAGE: TONE AUDIOMETRY -->
+<div id="pg-tonal" class="page">
+  <div class="header">
+    <div class="sub">🎵 Audiometría Tonal</div>
+    <h1>Tono Puro</h1>
+    <div class="divider"></div>
+  </div>
+
+  <div class="oido-sel">
+    <button class="oido-btn od active" id="btn-od" onclick="setOido('OD')" title="Oído Derecho">○ OD</button>
+    <button class="oido-btn oi" id="btn-oi" onclick="setOido('OI')" title="Oído Izquierdo">× OI</button>
+  </div>
+
+  <div class="freqs" id="freq-btns"></div>
+
+  <div class="card">
+    <div class="db-level-info">
+      <span class="card-title" style="margin:0">Intensidad Sonora</span>
+      <span><span class="db-display" id="db-display">40</span> <span class="db-unit">dB HL</span></span>
+    </div>
+    <input type="range" id="db-slider" min="-10" max="120" step="5" value="40" oninput="setDB(this.value)">
+    <div class="range-labels"><span>-10 dB</span><span>120 dB</span></div>
+
+    <!-- MASKING -->
+    <div class="mask-row">
+      <label class="mask-toggle">
+        <input type="checkbox" id="mask-check" onchange="toggleMask()">
+        <span class="mask-slider-ui"></span>
+      </label>
+      <span class="mask-label">Enmascaramiento</span>
+      <span class="mask-db" id="mask-db-display" style="display:none">NE: <strong id="mask-val">30</strong> dB</span>
+    </div>
+    <div id="mask-ctrl" style="display:none;margin-top:12px">
+      <input type="range" id="mask-slider" min="0" max="100" step="5" value="30" oninput="setMaskDB(this.value)" style="accent-color:#f59e0b">
+      <div class="range-labels"><span>0 dB</span><span>100 dB</span></div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-primary" id="btn-tone" onclick="emitirTono()">▶ Emitir Tono</button>
+    <button class="btn btn-success" onclick="marcarUmbral()">✓ Marcar Umbral</button>
+    <button class="btn btn-danger" onclick="borrarUmbral()">✕ Borrar</button>
+  </div>
+  <div class="mensaje" id="msg-tonal"></div>
+
+  <!-- AUDIOGRAM -->
+  <div class="audiogram-wrap">
+    <div class="audiogram-title">📈 Audiograma</div>
+    <svg id="audiogram" width="500" height="270"></svg>
+    <div class="legend">
+      <span style="color:#dc2626">○ OD</span>
+      <span style="color:#2563eb">× OI</span>
+      <span style="color:#f59e0b">▽ OD mask</span>
+      <span style="color:#06b6d4">□ OI mask</span>
+    </div>
+  </div>
+
+  <!-- CLASSIFICATION -->
+  <div class="card" id="clasif-card">
+    <div class="card-title">📋 Clasificación Audiométrica</div>
+    <div id="clasif-content"></div>
+  </div>
+</div>
+
+<!-- PAGE: SPEECH AUDIOMETRY -->
+<div id="pg-logo" class="page">
+  <div class="header">
+    <div class="sub">🗣️ Logoaudiometría</div>
+    <h1>Discriminación Verbal</h1>
+    <div class="divider"></div>
+  </div>
+
+  <div class="oido-sel">
+    <button class="oido-btn od active" id="logo-btn-od" onclick="setOidoLogo('OD')" title="Oído Derecho">○ OD</button>
+    <button class="oido-btn oi" id="logo-btn-oi" onclick="setOidoLogo('OI')" title="Oído Izquierdo">× OI</button>
+  </div>
+
+  <div class="card">
+    <div class="db-level-info">
+      <span class="card-title" style="margin:0">Nivel de Intensidad</span>
+      <span id="logo-db-val" style="font-size:22px;color:var(--primary-light);font-weight:700">40 dB</span>
+    </div>
+    <input type="range" id="logo-db-slider" min="-10" max="120" step="5" value="40" oninput="setDB(this.value)">
+  </div>
+
+  <div class="card" id="logo-card">
+    <div id="logo-main">
+      <div style="text-align:center;margin-bottom:14px">
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;letter-spacing:0.5px" id="logo-counter">PALABRA 1 de 15</div>
+        <button class="btn btn-primary" id="btn-hablar" onclick="hablarPalabra()">🔊 Reproducir Palabra</button>
+      </div>
+      <input type="text" class="logo-input" id="logo-respuesta" placeholder="Escribir lo que escuchó el paciente...">
+      <div class="logo-btns-row">
+        <button class="btn btn-success" onclick="registrarRespuesta(true)">✓ Correcta</button>
+        <button class="btn btn-danger" onclick="registrarRespuesta(false)">✗ Incorrecta</button>
+      </div>
+    </div>
+    <div id="logo-done" style="display:none;text-align:center">
+      <div style="color:var(--success-light);font-size:15px;margin-bottom:12px;letter-spacing:0.5px;font-weight:700">✓ Prueba Completada</div>
+      <div style="font-size:24px;color:var(--primary-light);margin-bottom:16px;font-weight:700" id="logo-pct-display"></div>
+      <button class="btn btn-primary" onclick="reiniciarLogo()">↺ Reiniciar Oído</button>
+    </div>
+  </div>
+
+  <!-- RESULTS TABLE -->
+  <div class="card">
+    <div class="card-title">📊 Resultados Logoaudiometría</div>
+    <div id="logo-tabla"></div>
+  </div>
+</div>
+
+<!-- PAGE: FINAL RESULTS -->
+<div id="pg-resultado" class="page">
+  <div class="header">
+    <div class="sub">📊 Informe Final</div>
+    <h1>Resultado Audiométrico</h1>
+    <div class="divider"></div>
+  </div>
+
+  <div class="card" id="resultado-paciente-info">
+    <div class="card-title">👤 Datos del Paciente</div>
+    <div id="res-pac-data" style="font-size:14px;color:var(--text-secondary);line-height:1.6"></div>
+  </div>
+
+  <div class="resumen-grid" id="resumen-grid"></div>
+
+  <div class="audiogram-wrap">
+    <div class="audiogram-title">📈 Audiograma Final</div>
+    <svg id="audiogram2" width="500" height="270"></svg>
+    <div class="legend">
+      <span style="color:#dc2626">○ OD</span>
+      <span style="color:#2563eb">× OI</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔍 Clasificación Diagnóstica</div>
+    <div id="res-clasif"></div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-success" onclick="guardarSesion()">💾 Guardar Sesión</button>
+    <button class="btn btn-primary" onclick="exportarPDF()">⬇ Exportar PDF</button>
+  </div>
+  <div class="mensaje" id="msg-resultado"></div>
+</div>
+
+<!-- PAGE: HISTORY -->
+<div id="pg-historial" class="page">
+  <div class="header">
+    <div class="sub">🗂️ Registro</div>
+    <h1>Historial de Sesiones</h1>
+    <div class="divider"></div>
+  </div>
+
+  <div style="max-width:100%">
+    <div class="btn-row" style="margin-bottom:16px">
+      <button class="btn btn-danger" onclick="borrarTodoHistorial()">🗑 Borrar Todo</button>
+    </div>
+    <div id="historial-lista"></div>
+  </div>
+</div>
+
+<div class="footer-note">
+  🎧 Audiómetro Clínico Pro · Usar auriculares calibrados · Solo referencia clínica
+</div>
+
+<script>
+// ===================== STATE =====================
+const FREQUENCIES = [250, 500, 1000, 2000, 4000, 8000];
+const PALABRAS = ["casa","perro","mar","sol","pan","luz","flor","tren","pez","campo","voz","cielo","agua","verde","noche"];
+const COLOR_OD = "#dc2626", COLOR_OI = "#2563eb";
+const COLOR_OD_M = "#f59e0b", COLOR_OI_M = "#06b6d4";
+
+let oido = "OD";
+let freqIdx = 2;
+let dB = 40;
+let maskDB = 30;
+let maskActive = false;
+let tonando = false;
+let logoOido = "OD";
+let logoIdx = 0;
+let logoHablando = false;
+
+let paciente = { nombre: "", edad: "", hc: "", fecha: "", motivo: "", obs: "" };
+let resultados = { OD: {}, OI: {} };        // { freq: dB }
+let maskResultados = { OD: {}, OI: {} };    // { freq: maskDB }
+let logoResultados = { OD: [], OI: [] };
+let audioCtx = null;
+
+// ===================== NAV =====================
+function goPage(id) {
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+  const idx = ["pg-paciente","pg-tonal","pg-logo","pg-resultado","pg-historial"].indexOf(id);
+  document.querySelectorAll(".nav-btn")[idx].classList.add("active");
+  if (id === "pg-resultado") actualizarResultado();
+  if (id === "pg-historial") renderHistorial();
+  if (id === "pg-tonal") { renderAudiograma("audiogram"); actualizarClasif(); }
+}
+
+// ===================== PACIENTE =====================
+function iniciarSesion() {
+  paciente.nombre = document.getElementById("pac-nombre").value.trim();
+  paciente.edad = document.getElementById("pac-edad").value;
+  paciente.hc = document.getElementById("pac-hc").value.trim();
+  paciente.fecha = document.getElementById("pac-fecha").value;
+  paciente.motivo = document.getElementById("pac-motivo").value.trim();
+  paciente.obs = document.getElementById("pac-obs").value.trim();
+  if (!paciente.nombre) { showMsg("msg-paciente", "⚠ Ingresá el nombre del paciente", "#f59e0b"); return; }
+  showMsg("msg-paciente", `✓ Sesión iniciada: ${paciente.nombre}`, "#10b981");
+  setTimeout(() => goPage("pg-tonal"), 800);
+}
+
+function limpiarSesion() {
+  if (!confirm("¿Borrar sesión actual y comenzar una nueva?")) return;
+  paciente = { nombre: "", edad: "", hc: "", fecha: "", motivo: "", obs: "" };
+  resultados = { OD: {}, OI: {} };
+  maskResultados = { OD: {}, OI: {} };
+  logoResultados = { OD: [], OI: [] };
+  logoIdx = 0;
+  document.getElementById("pac-nombre").value = "";
+  document.getElementById("pac-edad").value = "";
+  document.getElementById("pac-hc").value = "";
+  document.getElementById("pac-fecha").value = "";
+  document.getElementById("pac-motivo").value = "";
+  document.getElementById("pac-obs").value = "";
+  renderAudiograma("audiogram");
+  renderLogoTabla();
+  showMsg("msg-paciente", "✓ Nueva sesión lista", "#10b981");
+}
+
+// ===================== AUDIO =====================
+function getAudioCtx() {
+  if (!audioCtx || audioCtx.state === "closed") audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function emitirTono() {
+  if (tonando) return;
+  tonando = true;
+  const btn = document.getElementById("btn-tone");
+  btn.disabled = true; btn.textContent = "▶ Emitiendo...";
+
+  const ctx = getAudioCtx();
+  // Tono principal
+  const gainMain = ctx.createGain();
+  const osc = ctx.createOscillator();
+  const amp = Math.pow(10, (dB - 100) / 20);
+  gainMain.gain.setValueAtTime(0, ctx.currentTime);
+  gainMain.gain.linearRampToValueAtTime(amp, ctx.currentTime + 0.02);
+  gainMain.gain.setValueAtTime(amp, ctx.currentTime + 0.98);
+  gainMain.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.0);
+  osc.type = "sine"; osc.frequency.setValueAtTime(FREQUENCIES[freqIdx], ctx.currentTime);
+  osc.connect(gainMain); gainMain.connect(ctx.destination);
+  osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 1.0);
+
+  // Enmascaramiento (ruido blanco)
+  if (maskActive) {
+    const bufSize = ctx.sampleRate * 1.0;
+    const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) data[i] = (Math.random() * 2 - 1);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const gainMask = ctx.createGain();
+    const ampM = Math.pow(10, (maskDB - 100) / 20) * 0.3;
+    gainMask.gain.setValueAtTime(ampM, ctx.currentTime);
+    src.connect(gainMask); gainMask.connect(ctx.destination);
+    src.start(ctx.currentTime); src.stop(ctx.currentTime + 1.0);
+  }
+
+  setTimeout(() => {
+    tonando = false; btn.disabled = false; btn.textContent = "▶ Emitir Tono";
+  }, 1100);
+}
+
+// ===================== UMBRALES =====================
+function setOido(o) {
+  oido = o;
+  ["od","oi"].forEach(x => document.getElementById(`btn-${x}`).classList.toggle("active", (x === "od" && o === "OD") || (x === "oi" && o === "OI")));
+  updateDbColor();
+  renderAudiograma("audiogram");
+  actualizarClasif();
+}
+
+function setOidoLogo(o) {
+  logoOido = o;
+  document.getElementById("logo-btn-od").classList.toggle("active", o === "OD");
+  document.getElementById("logo-btn-oi").classList.toggle("active", o === "OI");
+  reiniciarLogoUI();
+  renderLogoTabla();
+}
+
+function setDB(v) {
+  dB = parseInt(v);
+  document.getElementById("db-slider").value = dB;
+  document.getElementById("db-display").textContent = dB;
+  if (document.getElementById("logo-db-slider")) {
+    document.getElementById("logo-db-slider").value = dB;
+    document.getElementById("logo-db-val").textContent = dB + " dB";
+  }
+  updateDbColor();
+}
+
+function setMaskDB(v) {
+  maskDB = parseInt(v);
+  document.getElementById("mask-val").textContent = maskDB;
+}
+
+function toggleMask() {
+  maskActive = document.getElementById("mask-check").checked;
+  document.getElementById("mask-ctrl").style.display = maskActive ? "" : "none";
+  document.getElementById("mask-db-display").style.display = maskActive ? "" : "none";
+}
+
+function updateDbColor() {
+  const col = oido === "OD" ? COLOR_OD : COLOR_OI;
+  document.getElementById("db-display").style.color = col;
+  document.getElementById("db-slider").style.accentColor = col;
+}
+
+function marcarUmbral() {
+  resultados[oido][FREQUENCIES[freqIdx]] = dB;
+  if (maskActive) maskResultados[oido][FREQUENCIES[freqIdx]] = maskDB;
+  showMsg("msg-tonal", `✓ ${FREQUENCIES[freqIdx]} Hz — ${dB} dB (${oido})${maskActive ? ` NE:${maskDB}dB` : ""}`, "#10b981");
+  renderAudiograma("audiogram");
+  actualizarClasif();
+}
+
+function borrarUmbral() {
+  delete resultados[oido][FREQUENCIES[freqIdx]];
+  delete maskResultados[oido][FREQUENCIES[freqIdx]];
+  showMsg("msg-tonal", `✕ Borrado: ${FREQUENCIES[freqIdx]} Hz (${oido})`, "#ef4444");
+  renderAudiograma("audiogram");
+  actualizarClasif();
+}
+
+// ===================== CLASIFICACIÓN =====================
+function promedioFrecuencias(datos, freqs) {
+  const vals = freqs.map(f => datos[f]).filter(v => v !== undefined);
+  if (!vals.length) return null;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+function clasificar(db) {
+  if (db === null) return null;
+  if (db <= 20) return { label: "Normal", cls: "normal" };
+  if (db <= 40) return { label: "Hipoacusia Leve", cls: "leve" };
+  if (db <= 60) return { label: "Hipoacusia Moderada", cls: "moderada" };
+  if (db <= 80) return { label: "Hipoacusia Severa", cls: "severa" };
+  return { label: "Hipoacusia Profunda", cls: "profunda" };
+}
+
+function actualizarClasif() {
+  const freqsKey = [500, 1000, 2000, 4000];
+  const ptaOD = promedioFrecuencias(resultados.OD, freqsKey);
+  const ptaOI = promedioFrecuencias(resultados.OI, freqsKey);
+  const cOD = clasificar(ptaOD);
+  const cOI = clasificar(ptaOI);
+
+  let html = '<div style="display:flex;gap:14px;flex-wrap:wrap">';
+  if (cOD) html += `<div><div style="font-size:10px;color:#7ca3c8;margin-bottom:4px">OD — PTA: ${ptaOD.toFixed(0)} dB</div><span class="clasif-badge clasif-${cOD.cls}">${cOD.label}</span></div>`;
+  if (cOI) html += `<div><div style="font-size:10px;color:#7ca3c8;margin-bottom:4px">OI — PTA: ${ptaOI.toFixed(0)} dB</div><span class="clasif-badge clasif-${cOI.cls}">${cOI.label}</span></div>`;
+  if (!cOD && !cOI) html += '<span style="color:#3a5a7a;font-size:12px">Sin datos suficientes</span>';
+  html += '</div>';
+  document.getElementById("clasif-content").innerHTML = html;
+}
+
+// ===================== LOGOAUDIOMETRÍA =====================
+function hablarPalabra() {
+  if (logoHablando || logoIdx >= PALABRAS.length) return;
+  logoHablando = true;
+  const btn = document.getElementById("btn-hablar");
+  btn.disabled = true; btn.textContent = "🔊 Reproduciendo...";
+  const u = new SpeechSynthesisUtterance(PALABRAS[logoIdx]);
+  u.lang = "es-ES"; u.rate = 0.85; u.volume = Math.min(1, Math.max(0.05, dB / 100));
+  u.onend = () => { logoHablando = false; btn.disabled = false; btn.textContent = "🔊 Reproducir Palabra"; };
+  window.speechSynthesis.speak(u);
+}
+
+function registrarRespuesta(correcta) {
+  logoResultados[logoOido].push({ palabra: PALABRAS[logoIdx], dB, correcta });
+  logoIdx++;
+  document.getElementById("logo-respuesta").value = "";
+  if (logoIdx >= PALABRAS.length) {
+    document.getElementById("logo-main").style.display = "none";
+    document.getElementById("logo-done").style.display = "";
+    const res = logoResultados[logoOido];
+    const pct = Math.round(res.filter(r => r.correcta).length / res.length * 100);
+    document.getElementById("logo-pct-display").innerHTML = `Discriminación: <strong>${pct}%</strong>`;
+  } else {
+    document.getElementById("logo-counter").textContent = `PALABRA ${logoIdx + 1} de ${PALABRAS.length}`;
+  }
+  renderLogoTabla();
+}
+
+function reiniciarLogo() { logoIdx = 0; logoResultados[logoOido] = []; reiniciarLogoUI(); renderLogoTabla(); }
+function reiniciarLogoUI() {
+  logoIdx = logoResultados[logoOido].length;
+  document.getElementById("logo-main").style.display = logoIdx < PALABRAS.length ? "" : "none";
+  document.getElementById("logo-done").style.display = logoIdx >= PALABRAS.length ? "" : "none";
+  document.getElementById("logo-counter").textContent = `PALABRA ${Math.min(logoIdx + 1, PALABRAS.length)} de ${PALABRAS.length}`;
+}
+
+function renderLogoTabla() {
+  let html = "";
+  ["OD","OI"].forEach(ear => {
+    const res = logoResultados[ear];
+    if (!res.length) return;
+    const pct = Math.round(res.filter(r => r.correcta).length / res.length * 100);
+    const col = ear === "OD" ? COLOR_OD : COLOR_OI;
+    html += `<div style="margin-bottom:12px"><div style="font-size:12px;color:${col};letter-spacing:0.5px;margin-bottom:8px;font-weight:700">${ear} — Discriminación: <strong>${pct}%</strong></div>`;
+    html += `<table style="width:100%;font-size:12px;border-collapse:collapse">`;
+    res.forEach(r => {
+      html += `<tr><td style="padding:6px 8px;border-bottom:1px solid #334155;color:#f1f5f9">${r.palabra}</td><td style="padding:6px 8px;border-bottom:1px solid #334155;color:#94a3b8">${r.dB} dB</td><td style="padding:6px 8px;border-bottom:1px solid #334155;color:${r.correcta ? '#10b981' : '#ef4444'};font-weight:700">${r.correcta ? "✓" : "✗"}</td></tr>`;
+    });
+    html += "</table></div>";
+  });
+  if (!html) html = '<span style="color:#64748b;font-size:13px">Sin resultados aún</span>';
+  document.getElementById("logo-tabla").innerHTML = html;
+}
+
+// ===================== AUDIOGRAMA =====================
+const svgW = 500, svgH = 270, padL = 52, padT = 28, padR = 18, padB = 38;
+const chartW = svgW - padL - padR, chartH = svgH - padT - padB;
+const DB_MIN = -10, DB_MAX = 120;
+function xPos(i) { return padL + (i / (FREQUENCIES.length - 1)) * chartW; }
+function yPos(db) { return padT + ((db - DB_MIN) / (DB_MAX - DB_MIN)) * chartH; }
+function svgEl(tag, attrs, text) {
+  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, v);
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+
+function renderAudiograma(svgId) {
+  const svg = document.getElementById(svgId);
+  svg.innerHTML = "";
+  // Zona normal
+  svg.appendChild(svgEl("rect", { x: padL, y: yPos(-10), width: chartW, height: yPos(25) - yPos(-10), fill: "rgba(124,163,200,0.05)" }));
+  // Grid
+  [-10,0,10,20,30,40,50,60,70,80,90,100,110,120].forEach(db => {
+    svg.appendChild(svgEl("line", { x1: padL, y1: yPos(db), x2: svgW-padR, y2: yPos(db), stroke: "#1e3050", "stroke-width": db===0?1:0.5 }));
+    svg.appendChild(svgEl("text", { x: padL-5, y: yPos(db), "text-anchor":"end","dominant-baseline":"middle",fill:"#3a5a7a","font-size":8 }, String(db)));
+  });
+  FREQUENCIES.forEach((f, i) => {
+    svg.appendChild(svgEl("line", { x1: xPos(i), y1: padT, x2: xPos(i), y2: svgH-padB, stroke: "#1e3050","stroke-width":0.5 }));
+    svg.appendChild(svgEl("text", { x: xPos(i), y: svgH-padB+12,"text-anchor":"middle",fill:"#3a5a7a","font-size":8 }, f>=1000?`${f/1000}k`:String(f)));
+  });
+  svg.appendChild(svgEl("text",{x:padL-36,y:padT+chartH/2,"text-anchor":"middle",fill:"#4a6a8a","font-size":8,transform:`rotate(-90,${padL-36},${padT+chartH/2})`},"dB HL"));
+  svg.appendChild(svgEl("text",{x:padL+chartW/2,y:svgH-1,"text-anchor":"middle",fill:"#4a6a8a","font-size":8},"Hz"));
+
+  // Curvas
+  [["OD",COLOR_OD,"○",COLOR_OD_M,"▽"],["OI",COLOR_OI,"×",COLOR_OI_M,"□"]].forEach(([ear,col,sym,colM,symM]) => {
+    const puntos = FREQUENCIES.map((f,i) => resultados[ear][f]!==undefined?{x:xPos(i),y:yPos(resultados[ear][f])}:null).filter(Boolean);
+    if (puntos.length >= 2) {
+      const d = puntos.map((p,i) => `${i===0?"M":"L"} ${p.x} ${p.y}`).join(" ");
+      svg.appendChild(svgEl("path",{d,fill:"none",stroke:col,"stroke-width":2,"stroke-opacity":0.7}));
+    }
+    puntos.forEach(p => svg.appendChild(svgEl("text",{x:p.x,y:p.y,"text-anchor":"middle","dominant-baseline":"middle",fill:col,"font-size":13,"font-weight":"bold"},sym)));
+    // Mask
+    FREQUENCIES.forEach((f,i) => {
+      if (maskResultados[ear][f] !== undefined) {
+        svg.appendChild(svgEl("text",{x:xPos(i),y:yPos(resultados[ear][f]||0),"text-anchor":"middle","dominant-baseline":"middle",fill:colM,"font-size":11},symM));
+      }
+    });
+  });
+}
+
+// ===================== RESULTADO FINAL =====================
+function actualizarResultado() {
+  // Paciente
+  let pd = `<strong>${paciente.nombre || "Sin nombre"}</strong>`;
+  if (paciente.edad) pd += ` · ${paciente.edad} años`;
+  if (paciente.hc) pd += ` · HC: ${paciente.hc}`;
+  if (paciente.fecha) pd += ` · ${paciente.fecha}`;
+  if (paciente.motivo) pd += `<br><span style="color:#5a7a9a;font-size:12px">${paciente.motivo}</span>`;
+  document.getElementById("res-pac-data").innerHTML = pd;
+
+  // Resumen grid
+  const freqsKey = [500,1000,2000,4000];
+  const ptaOD = promedioFrecuencias(resultados.OD, freqsKey);
+  const ptaOI = promedioFrecuencias(resultados.OI, freqsKey);
+  const logoODpct = logoResultados.OD.length ? Math.round(logoResultados.OD.filter(r=>r.correcta).length/logoResultados.OD.length*100) : null;
+  const logoOIpct = logoResultados.OI.length ? Math.round(logoResultados.OI.filter(r=>r.correcta).length/logoResultados.OI.length*100) : null;
+
+  let rg = "";
+  rg += resItem("PTA Oído Derecho", ptaOD !== null ? `${ptaOD.toFixed(0)} dB` : "—", COLOR_OD);
+  rg += resItem("PTA Oído Izquierdo", ptaOI !== null ? `${ptaOI.toFixed(0)} dB` : "—", COLOR_OI);
+  rg += resItem("Discrimin. OD", logoODpct !== null ? `${logoODpct}%` : "—", COLOR_OD);
+  rg += resItem("Discrimin. OI", logoOIpct !== null ? `${logoOIpct}%` : "—", COLOR_OI);
+  document.getElementById("resumen-grid").innerHTML = rg;
+
+  // Clasificación
+  const cOD = clasificar(ptaOD), cOI = clasificar(ptaOI);
+  let cf = '<div style="display:flex;gap:14px;flex-wrap:wrap">';
+  if (cOD) cf += `<div><div style="font-size:10px;color:#7ca3c8;margin-bottom:4px">OD — PTA: ${ptaOD.toFixed(0)} dB</div><span class="clasif-badge clasif-${cOD.cls}">${cOD.label}</span></div>`;
+  if (cOI) cf += `<div><div style="font-size:10px;color:#7ca3c8;margin-bottom:4px">OI — PTA: ${ptaOI.toFixed(0)} dB</div><span class="clasif-badge clasif-${cOI.cls}">${cOI.label}</span></div>`;
+  if (!cOD && !cOI) cf += '<span style="color:#3a5a7a;font-size:12px">Sin datos suficientes</span>';
+  cf += '</div>';
+  document.getElementById("res-clasif").innerHTML = cf;
+
+  renderAudiograma("audiogram2");
+}
+
+function resItem(label, val, color) {
+  return `<div class="resumen-item"><div class="ri-label">${label}</div><div class="ri-val" style="color:${color}">${val}</div></div>`;
+}
+
+// ===================== GUARDAR / HISTORIAL =====================
+function guardarSesion() {
+  if (!paciente.nombre) { showMsg("msg-resultado", "⚠ Completá los datos del paciente primero", "#f59e0b"); return; }
+  const sesion = {
+    id: Date.now(),
+    fecha: paciente.fecha || new Date().toLocaleDateString("es-AR"),
+    paciente: { ...paciente },
+    resultados: JSON.parse(JSON.stringify(resultados)),
+    maskResultados: JSON.parse(JSON.stringify(maskResultados)),
+    logoResultados: JSON.parse(JSON.stringify(logoResultados)),
+  };
+  const hist = getHistorial();
+  hist.push(sesion);
+  localStorage.setItem("audiometro_historial", JSON.stringify(hist));
+  showMsg("msg-resultado", "✓ Sesión guardada en historial", "#10b981");
+}
+
+function getHistorial() {
+  try { return JSON.parse(localStorage.getItem("audiometro_historial") || "[]"); } catch { return []; }
+}
+
+function renderHistorial() {
+  const hist = getHistorial();
+  const c = document.getElementById("historial-lista");
+  if (!hist.length) { c.innerHTML = '<div class="no-sessions">Sin sesiones guardadas</div>'; return; }
+  c.innerHTML = hist.slice().reverse().map(s => {
+    const freqsKey = [500,1000,2000,4000];
+    const ptaOD = promedioFrecuencias(s.resultados.OD, freqsKey);
+    const ptaOI = promedioFrecuencias(s.resultados.OI, freqsKey);
+    const cOD = clasificar(ptaOD), cOI = clasificar(ptaOI);
+    let badges = "";
+    if (cOD) badges += `<span class="sc-badge clasif-badge clasif-${cOD.cls}">OD: ${cOD.label}</span>`;
+    if (cOI) badges += `<span class="sc-badge clasif-badge clasif-${cOI.cls}">OI: ${cOI.label}</span>`;
+    return `<div class="session-card" onclick="cargarSesion(${s.id})">
+      <div class="sc-header">
+        <span class="sc-name">${s.paciente.nombre}</span>
+        <span class="sc-date">${s.fecha}</span>
+      </div>
+      ${s.paciente.hc ? `<div style="font-size:11px;color:#94a3b8;margin-bottom:8px;font-weight:500">HC: ${s.paciente.hc}</div>` : ""}
+      <div class="sc-badges">${badges || '<span style="color:#64748b;font-size:11px">Sin clasificación</span>'}</div>
+      <div style="font-size:11px;color:#64748b;margin-top:8px;text-align:right;font-weight:500">Toca para cargar →</div>
+    </div>`;
+  }).join("");
+}
+
+function cargarSesion(id) {
+  const hist = getHistorial();
+  const s = hist.find(x => x.id === id);
+  if (!s) return;
+  paciente = { ...s.paciente };
+  resultados = JSON.parse(JSON.stringify(s.resultados));
+  maskResultados = JSON.parse(JSON.stringify(s.maskResultados || { OD:{}, OI:{} }));
+  logoResultados = JSON.parse(JSON.stringify(s.logoResultados));
+  document.getElementById("pac-nombre").value = paciente.nombre;
+  document.getElementById("pac-edad").value = paciente.edad;
+  document.getElementById("pac-hc").value = paciente.hc;
+  document.getElementById("pac-fecha").value = paciente.fecha;
+  document.getElementById("pac-motivo").value = paciente.motivo;
+  document.getElementById("pac-obs").value = paciente.obs;
+  renderLogoTabla();
+  goPage("pg-resultado");
+}
+
+function borrarTodoHistorial() {
+  if (!confirm("¿Borrar todo el historial? Esta acción no se puede deshacer.")) return;
+  localStorage.removeItem("audiometro_historial");
+  renderHistorial();
+}
+
+// ===================== EXPORT PDF =====================
+function exportarPDF() {
+  const win = window.open("", "_blank");
+  const freqsKey = [500,1000,2000,4000];
+  const ptaOD = promedioFrecuencias(resultados.OD, freqsKey);
+  const ptaOI = promedioFrecuencias(resultados.OI, freqsKey);
+  const cOD = clasificar(ptaOD), cOI = clasificar(ptaOI);
+
+  const filasTonal = FREQUENCIES.map(f => `<tr>
+    <td>${f} Hz</td>
+    <td style="color:#c04040">${resultados.OD[f]!==undefined?resultados.OD[f]+" dB":"—"}${maskResultados.OD[f]!==undefined?` (NE:${maskResultados.OD[f]}dB)`:""}</td>
+    <td style="color:#2a60a0">${resultados.OI[f]!==undefined?resultados.OI[f]+" dB":"—"}${maskResultados.OI[f]!==undefined?` (NE:${maskResultados.OI[f]}dB)`:""}</td>
+  </tr>`).join("");
+
+  const filasLogoOD = logoResultados.OD.map(r=>`<tr><td>${r.palabra}</td><td>${r.dB} dB</td><td>${r.correcta?"✓":"✗"}</td></tr>`).join("");
+  const filasLogoOI = logoResultados.OI.map(r=>`<tr><td>${r.palabra}</td><td>${r.dB} dB</td><td>${r.correcta?"✓":"✗"}</td></tr>`).join("");
+  const pctOD = logoResultados.OD.length ? Math.round(logoResultados.OD.filter(r=>r.correcta).length/logoResultados.OD.length*100)+"%" : "—";
+  const pctOI = logoResultados.OI.length ? Math.round(logoResultados.OI.filter(r=>r.correcta).length/logoResultados.OI.length*100)+"%" : "—";
+
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Audiograma — ${paciente.nombre}</title>
+  <style>
+    body{font-family:Georgia,serif;margin:40px;color:#111}
+    h1{text-align:center;font-size:20px;letter-spacing:2px;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:4px}
+    h2{font-size:14px;margin-top:24px;border-left:3px solid #111;padding-left:8px}
+    table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}
+    th{background:#1a1a2e;color:#fff;padding:7px}
+    td{border:1px solid #ccc;padding:5px 10px;text-align:center}
+    .info{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0;font-size:12px}
+    .info div{padding:6px 10px;background:#f5f5f5;border-radius:4px}
+    .clasif{display:inline-block;padding:3px 12px;border-radius:10px;font-size:11px;font-weight:bold;margin-top:4px}
+    @media print{button{display:none}}
+  </style>
+  </head><body>
+  <h1>AUDIOGRAMA CLÍNICO</h1>
+  <div class="info">
+    <div><strong>Paciente:</strong> ${paciente.nombre||"—"}</div>
+    <div><strong>Edad:</strong> ${paciente.edad||"—"}</div>
+    <div><strong>HC:</strong> ${paciente.hc||"—"}</div>
+    <div><strong>Fecha:</strong> ${paciente.fecha||new Date().toLocaleDateString("es-AR")}</div>
+    <div><strong>Motivo:</strong> ${paciente.motivo||"—"}</div>
+    <div><strong>Obs:</strong> ${paciente.obs||"—"}</div>
+  </div>
+  <h2>Audiometría Tonal — Umbrales</h2>
+  <table><tr><th>Frecuencia</th><th>OD (Derecho)</th><th>OI (Izquierdo)</th></tr>${filasTonal}</table>
+  <h2>Clasificación Diagnóstica</h2>
+  <p style="font-size:12px;margin-top:8px">
+    ${ptaOD!==null?`<strong>OD — PTA: ${ptaOD.toFixed(0)} dB → ${cOD.label}</strong><br>`:"OD: Sin datos<br>"}
+    ${ptaOI!==null?`<strong>OI — PTA: ${ptaOI.toFixed(0)} dB → ${cOI.label}</strong>`:"OI: Sin datos"}
+  </p>
+  ${logoResultados.OD.length||logoResultados.OI.length?`
+  <h2>Logoaudiometría</h2>
+  ${logoResultados.OD.length?`<p style="font-size:12px"><strong>Oído Derecho — Discriminación: ${pctOD}</strong></p><table><tr><th>Palabra</th><th>Nivel</th><th>Correcta</th></tr>${filasLogoOD}</table>`:""}
+  ${logoResultados.OI.length?`<p style="font-size:12px;margin-top:12px"><strong>Oído Izquierdo — Discriminación: ${pctOI}</strong></p><table><tr><th>Palabra</th><th>Nivel</th><th>Correcta</th></tr>${filasLogoOI}</table>`:""}
+  `:""}
+  <br><hr style="margin-top:30px"><p style="font-size:10px;color:#666;text-align:center">Generado con Audiómetro Clínico Pro · Solo referencia clínica</p>
+  <br><button onclick="window.print()" style="padding:10px 24px;background:#1a1a2e;color:#fff;border:none;border-radius:4px;font-size:13px;cursor:pointer">🖨️ Imprimir / Guardar PDF</button>
+  </body></html>`);
+  win.document.close();
+}
+
+// ===================== UTILS =====================
+function showMsg(id, text, color) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text; el.style.color = color;
+  setTimeout(() => { el.textContent = ""; }, 2500);
+}
+
+// ===================== INIT =====================
+function buildFreqBtns() {
+  const c = document.getElementById("freq-btns"); c.innerHTML = "";
+  FREQUENCIES.forEach((f, i) => {
+    const b = document.createElement("button");
+    b.className = "freq-btn" + (i === freqIdx ? " active" : "");
+    b.textContent = (f >= 1000 ? `${f/1000}k` : f) + " Hz";
+    b.onclick = () => { freqIdx = i; buildFreqBtns(); };
+    c.appendChild(b);
+  });
+}
+
+// Fecha de hoy por defecto
+document.getElementById("pac-fecha").value = new Date().toISOString().split("T")[0];
+buildFreqBtns();
+renderAudiograma("audiogram");
+actualizarClasif();
+renderLogoTabla();
+updateDbColor();
+</script>
+</body>
+</html>
