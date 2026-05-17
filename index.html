@@ -216,10 +216,11 @@
 
   <div class="card" id="logo-card">
     <div id="logo-main">
-        <div style="text-align:center;margin-bottom:14px">
-          <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;letter-spacing:0.5px" id="logo-counter">PALABRA 1 de 15</div>
-          <button class="btn btn-primary" id="btn-hablar" onclick="Logo.hablarPalabra()"><svg class="icon" aria-hidden="true"><use href="#i-volume"></use></svg> Reproducir Palabra</button>
-        </div>
+      <div style="text-align:center;margin-bottom:14px">
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;letter-spacing:0.5px" id="logo-counter">PALABRA 1 de 15</div>
+        <div style="font-size:14px;color:var(--text-secondary);margin-bottom:10px;font-weight:700;letter-spacing:0.3px" id="logo-word">—</div>
+        <button class="btn btn-primary" id="btn-hablar" onclick="Logo.hablarPalabra()"><svg class="icon" aria-hidden="true"><use href="#i-volume"></use></svg> Reproducir Palabra</button>
+      </div>
       <input type="text" class="logo-input" id="logo-respuesta" placeholder="Escribir lo que escuchó el paciente...">
       <div class="logo-btns-row">
         <button class="btn btn-success" onclick="Logo.registrarRespuesta(true)">✓ Correcta</button>

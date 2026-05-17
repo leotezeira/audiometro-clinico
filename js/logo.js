@@ -5,6 +5,21 @@
 
 const Logo = {
   /**
+   * Actualiza el texto de la palabra actual (visible para el profesional)
+   */
+  actualizarPalabraUI() {
+    const el = document.getElementById("logo-word");
+    if (!el) return;
+
+    if (State.logoIdx >= PALABRAS.length) {
+      el.textContent = "—";
+      return;
+    }
+
+    el.textContent = PALABRAS[State.logoIdx];
+  },
+
+  /**
    * Cambia de oído en logo
    */
   setOido(oido) {
@@ -44,6 +59,7 @@ const Logo = {
         `PALABRA ${State.logoIdx + 1} de ${PALABRAS.length}`;
     }
 
+    this.actualizarPalabraUI();
     this.renderTabla();
   },
 
@@ -53,6 +69,7 @@ const Logo = {
   mostrarResultado() {
     document.getElementById("logo-main").style.display = "none";
     document.getElementById("logo-done").style.display = "";
+    this.actualizarPalabraUI();
 
     const respuestas = State.logoResultados[State.logoOido];
     const pct = Classifications.calcularDiscriminacion(respuestas);
@@ -81,6 +98,7 @@ const Logo = {
       State.logoIdx >= PALABRAS.length ? "" : "none";
     document.getElementById("logo-counter").textContent = 
       `PALABRA ${Math.min(State.logoIdx + 1, PALABRAS.length)} de ${PALABRAS.length}`;
+    this.actualizarPalabraUI();
   },
 
   /**

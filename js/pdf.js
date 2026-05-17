@@ -15,21 +15,23 @@ const PDF = {
     const cOD = Classifications.clasificar(ptaOD);
     const cOI = Classifications.clasificar(ptaOI);
 
+    const NA = "N/A";
+
     const filasTonal = FREQUENCIES.map(f => {
-      const od = resultados.OD[f] !== undefined ? `${resultados.OD[f]} dB` : "â€”";
-      const oi = resultados.OI[f] !== undefined ? `${resultados.OI[f]} dB` : "â€”";
+      const od = resultados.OD[f] !== undefined ? `${resultados.OD[f]} dB` : NA;
+      const oi = resultados.OI[f] !== undefined ? `${resultados.OI[f]} dB` : NA;
       const odMask = maskResultados.OD[f] !== undefined ? ` (NE:${maskResultados.OD[f]}dB)` : "";
       const oiMask = maskResultados.OI[f] !== undefined ? ` (NE:${maskResultados.OI[f]}dB)` : "";
       return `<tr><td>${f} Hz</td><td style="color:#c04040">${od}${odMask}</td><td style="color:#2a60a0">${oi}${oiMask}</td></tr>`;
     }).join("");
 
     const filasLogo = (oido) => (logoResultados[oido] || []).map(r =>
-      `<tr><td>${r.palabra}</td><td>${r.dB} dB</td><td>${r.correcta ? "âœ“" : "âœ—"}</td></tr>`
+      `<tr><td>${r.palabra}</td><td>${r.dB} dB</td><td>${r.correcta ? "✓" : "✗"}</td></tr>`
     ).join("");
 
     const pctLogo = (oido) => {
       const pct = Classifications.calcularDiscriminacion(logoResultados[oido] || []);
-      return pct === null ? "â€”" : `${pct}%`;
+      return pct === null ? NA : `${pct}%`;
     };
 
     const win = window.open("", "_blank");
@@ -55,12 +57,12 @@ const PDF = {
     </head><body>
       <h1>AUDIOGRAMA CLÍNICO</h1>
       <div class="info">
-        <div><strong>Paciente:</strong> ${this._esc(paciente.nombre) || "â€”"}</div>
-        <div><strong>Edad:</strong> ${this._esc(paciente.edad) || "â€”"}</div>
-        <div><strong>HC:</strong> ${this._esc(paciente.hc) || "â€”"}</div>
+        <div><strong>Paciente:</strong> ${this._esc(paciente.nombre) || NA}</div>
+        <div><strong>Edad:</strong> ${this._esc(paciente.edad) || NA}</div>
+        <div><strong>HC:</strong> ${this._esc(paciente.hc) || NA}</div>
         <div><strong>Fecha:</strong> ${this._esc(paciente.fecha) || new Date().toLocaleDateString("es-AR")}</div>
-        <div style="grid-column:1/-1"><strong>Motivo:</strong> <span class="muted">${this._esc(paciente.motivo) || "â€”"}</span></div>
-        <div style="grid-column:1/-1"><strong>Obs:</strong> <span class="muted">${this._esc(paciente.obs) || "â€”"}</span></div>
+        <div style="grid-column:1/-1"><strong>Motivo:</strong> <span class="muted">${this._esc(paciente.motivo) || NA}</span></div>
+        <div style="grid-column:1/-1"><strong>Obs:</strong> <span class="muted">${this._esc(paciente.obs) || NA}</span></div>
       </div>
 
       <h2>Audiometría Tonal — Umbrales</h2>
@@ -68,8 +70,8 @@ const PDF = {
 
       <h2>Clasificación Diagnóstica</h2>
       <p style="font-size:12px;margin-top:8px">
-        ${ptaOD !== null ? `<strong>OD — PTA: ${ptaOD.toFixed(0)} dB → ${this._esc(cOD?.label) || "—"}</strong><br>` : "OD: Sin datos<br>"}
-        ${ptaOI !== null ? `<strong>OI — PTA: ${ptaOI.toFixed(0)} dB → ${this._esc(cOI?.label) || "—"}</strong>` : "OI: Sin datos"}
+        ${ptaOD !== null ? `<strong>OD — PTA: ${ptaOD.toFixed(0)} dB → ${this._esc(cOD?.label) || NA}</strong><br>` : `OD: ${NA}<br>`}
+        ${ptaOI !== null ? `<strong>OI — PTA: ${ptaOI.toFixed(0)} dB → ${this._esc(cOI?.label) || NA}</strong>` : `OI: ${NA}`}
       </p>
 
       ${(logoResultados.OD?.length || logoResultados.OI?.length) ? `
