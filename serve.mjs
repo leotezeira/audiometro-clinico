@@ -17,6 +17,9 @@ const MIME = {
   ".mjs": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
@@ -79,4 +82,3 @@ server.listen(port, () => {
   // eslint-disable-next-line no-console
   console.log(`Static server running: http://localhost:${port}/ (root: ${root})`);
 });
-

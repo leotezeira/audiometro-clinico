@@ -5,6 +5,7 @@
 
 const Audio = {
   audioCtx: null,
+  _voiceCache: new Map(),
 
   /**
    * Devuelve el valor de paneo para un oÃ­do.
@@ -164,17 +165,83 @@ const Audio = {
     btn.disabled = true;
     btn.textContent = "Reproduciendo...";
 
-    const utterance = new SpeechSynthesisUtterance(palabra);
-    utterance.lang = "es-ES";
-    utterance.rate = 0.85;
-    utterance.volume = Math.min(1, Math.max(0.05, State.dB / 100));
+    const ear = arguments.length >= 2 ? arguments[1] : State.logoOido;
 
-    utterance.onend = () => {
-      State.logoHablando = false;
-      btn.disabled = false;
-      btn.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#i-volume"></use></svg> Reproducir Palabra';
-    };
+    // Intento 1: reproducir archivo de audio paneado (si existe)
+    this._playWordAudio(palabra, ear)
+      .catch(() => this._speakFallback(palabra))
+      .finally(() => {
+        State.logoHablando = false;
+        btn.disabled = false;
+        btn.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#i-volume"></use></svg> Reproducir Palabra';
+      });
+  }
+  ,
 
-    window.speechSynthesis.speak(utterance);
+  async _playWordAudio(palabra, ear) {
+    const ctx = this.getContext();
+
+    // Rutas posibles (podÃ©s agregar tus propios audios)
+    const base = "audio/palabras/";
+    const candidates = [
+      `${base}${encodeURIComponent(palabra)}.mp3`,
+      `${base}${encodeURIComponent(palabra)}.wav`,
+      `${base}${encodeURIComponent(palabra)}.ogg`
+    ];
+
+    let arrayBuffer = null;
+    let cacheKey = null;
+
+    for (const url of candidates) {
+      cacheKey = url;
+      if (this._voiceCache.has(cacheKey)) break;
+
+      const resp = await fetch(url, { cache: "force-cache" });
+      if (!resp.ok) continue;
+      arrayBuffer = await resp.arrayBuffer();
+      break;
+    }
+
+    let audioBuffer = this._voiceCache.get(cacheKey);
+    if (!audioBuffer) {
+      if (!arrayBuffer) throw new Error("no-audio-file");
+      audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+      this._voiceCache.set(cacheKey, audioBuffer);
+    }
+
+    const src = ctx.createBufferSource();
+    src.buffer = audioBuffer;
+
+    const gain = ctx.createGain();
+    const amp = Math.min(1, Math.max(0.05, State.dB / 100));
+    gain.gain.setValueAtTime(amp, ctx.currentTime);
+
+    src.connect(gain);
+
+    const panNode = this.createPanner(ctx, this.panForEar(ear));
+    if (panNode.input && panNode.output) {
+      gain.connect(panNode.input);
+      panNode.output.connect(ctx.destination);
+    } else {
+      gain.connect(panNode);
+      panNode.connect(ctx.destination);
+    }
+
+    return await new Promise((resolve) => {
+      src.onended = () => resolve();
+      src.start(ctx.currentTime);
+    });
+  },
+
+  _speakFallback(palabra) {
+    return new Promise((resolve) => {
+      const utterance = new SpeechSynthesisUtterance(palabra);
+      utterance.lang = "es-ES";
+      utterance.rate = 0.85;
+      utterance.volume = Math.min(1, Math.max(0.05, State.dB / 100));
+      utterance.onend = () => resolve();
+      utterance.onerror = () => resolve();
+      window.speechSynthesis.speak(utterance);
+    });
   }
 };

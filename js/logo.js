@@ -20,7 +20,7 @@ const Logo = {
    */
   hablarPalabra() {
     if (State.logoIdx >= PALABRAS.length) return;
-    Audio.hablarPalabra(PALABRAS[State.logoIdx]);
+    Audio.hablarPalabra(PALABRAS[State.logoIdx], State.logoOido);
   },
 
   /**
