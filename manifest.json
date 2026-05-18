@@ -1,0 +1,25 @@
+{
+  "name": "Audiometro Clinico Pro",
+  "short_name": "Audiometro",
+  "description": "Audiometro clinico (PWA) para evaluacion auditiva.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "icons": [
+    {
+      "src": "logoappclinica.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "logoappclinica.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
