@@ -11,6 +11,13 @@
   <link rel="icon" href="/logoappclinica.png" type="image/png">
   <title>Audiómetro Clínico Pro</title>
   <link rel="stylesheet" href="css/styles.css">
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
+      });
+    }
+  </script>
 </head>
 <body>
 
