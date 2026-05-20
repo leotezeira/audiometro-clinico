@@ -19,9 +19,9 @@ descargar() {
 
   try {
 
-    // eliminar iframe anterior
+    // eliminar iframe previo
     const oldFrame =
-      document.getElementById("pdf-print-frame");
+      document.getElementById("print-frame");
 
     if (oldFrame) {
       oldFrame.remove();
@@ -31,47 +31,86 @@ descargar() {
     const iframe =
       document.createElement("iframe");
 
-    iframe.id = "pdf-print-frame";
+    iframe.id = "print-frame";
 
     iframe.style.position = "fixed";
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-
     iframe.style.right = "0";
     iframe.style.bottom = "0";
 
-    iframe.style.border = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
 
-    iframe.style.opacity = "0";
+    iframe.style.border = "0";
 
     document.body.appendChild(iframe);
 
-    // referencia
-    const iframeWindow =
-      iframe.contentWindow;
+    const doc =
+      iframe.contentWindow.document;
 
-    const iframeDoc =
-      iframeWindow.document;
+    // ─────────────────────────────
+    // CLONAR ESTILOS DEL DOCUMENTO
+    // ─────────────────────────────
+    const styles =
+      Array.from(document.querySelectorAll(
+        'link[rel="stylesheet"], style'
+      ))
+      .map(el => el.outerHTML)
+      .join("\n");
 
-    // escribir HTML
-    iframeDoc.open();
+    // ─────────────────────────────
+    // HTML DEL REPORTE
+    // ─────────────────────────────
+    const html =
+      this._generarHTML();
 
-    iframeDoc.write(
-      this._generarHTML()
-    );
+    // ─────────────────────────────
+    // ESCRIBIR DOCUMENTO COMPLETO
+    // ─────────────────────────────
+    doc.open();
 
-    iframeDoc.close();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
 
-    // esperar carga
+        ${styles}
+
+        <style>
+
+          @page {
+            size: A4;
+            margin: 10mm;
+          }
+
+          body {
+            background: white;
+          }
+
+        </style>
+
+      </head>
+      <body>
+
+        ${html}
+
+      </body>
+      </html>
+    `);
+
+    doc.close();
+
+    // ─────────────────────────────
+    // ESPERAR CARGA
+    // ─────────────────────────────
     iframe.onload = () => {
 
       setTimeout(() => {
 
         try {
 
-          iframeWindow.focus();
+          iframe.contentWindow.focus();
 
-          iframeWindow.print();
+          iframe.contentWindow.print();
 
           UI?.showMsg?.(
             "msg-resultado",
@@ -81,30 +120,24 @@ descargar() {
 
         } catch (err) {
 
-          console.error(
-            "Error al imprimir:",
-            err
-          );
+          console.error(err);
 
           alert(
-            "No se pudo abrir el diálogo de impresión."
+            "No se pudo abrir impresión."
           );
 
         }
 
-      }, 700);
+      }, 1200);
 
     };
 
   } catch (err) {
 
-    console.error(
-      "Error generando PDF:",
-      err
-    );
+    console.error(err);
 
     alert(
-      "Ocurrió un error al generar el PDF."
+      "Error generando PDF."
     );
 
   }
