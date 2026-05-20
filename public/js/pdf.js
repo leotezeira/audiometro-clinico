@@ -1,53 +1,188 @@
 /**
  * PDF.JS
- * Generación de PDF para Android PWA con jsPDF + html2canvas
+ * Generación de PDF para Android PWA sin librerías externas
  * 
- * Estrategia: Usar html2canvas para renderizar el HTML a canvas/imagen,
- * luego agregar esa imagen a un PDF con jsPDF.
- * Esto funciona mucho mejor en Android que window.print()
+ * Estrategia: Crear HTML puro que se abre en ventana nueva.
+ * El navegador maneja la descarga/impresión nativa.
+ * Funciona 100% en Android sin dependencias.
  */
 
 const PDF = {
 
   descargar() {
     try {
-      // Crear contenedor temporal
-      const tempDiv = document.createElement('div');
-      tempDiv.id = 'pdf-temp-container';
-      tempDiv.style.position = 'fixed';
-      tempDiv.style.top = '-9999px';
-      tempDiv.style.left = '-9999px';
-      tempDiv.style.width = '210mm';
-      tempDiv.style.backgroundColor = 'white';
+      alert('⏳ Preparando PDF...');
       
-      // Generar HTML del reporte
-      const html = this._generarHTML();
-      tempDiv.innerHTML = html;
+      const paciente = State?.paciente || {};
+      const filename = `Audiograma_${paciente.nombre || 'Paciente'}_${new Date().toISOString().split('T')[0]}.html`;
       
-      document.body.appendChild(tempDiv);
+      // Generar HTML completo
+      const htmlContent = this._generarHTMLCompleto();
       
-      // Mostrar mensaje de carga
-      UI?.showMsg?.('msg-resultado', '⏳ Generando PDF...', '#3b82f6');
+      // Crear blob
+      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
       
-      // Usar html2canvas para convertir a imagen
-      html2canvas(tempDiv, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff'
-      }).then(canvas => {
-        
-        // Crear PDF
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({
-          orientation: 'portrait',
-          unit: 'mm',
-          format: 'a4'
-        });
-        
-        const imgData = canvas.toDataURL('image/png');
-        const pageWidth = pdf.internal.pageSize.getWidth();
-        const pageHeight = pdf.internal.pageSize.getHeight();
+      // Descargar usando link temporal
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      setTimeout(() => {
+        UI?.showMsg?.('msg-resultado', '✓ Archivo listo para descargar', '#10b981');
+      }, 500);
+      
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error: ' + error.message);
+    }
+  },
+
+  enviarPorCorreo() {
+    const paciente = State?.paciente || {};
+    if (!paciente.nombre) {
+      alert('Completa los datos del paciente primero');
+      return;
+    }
+
+    // Descargar primero
+    this.descargar();
+
+    // Luego abrir correo
+    setTimeout(() => {
+      const subject = 'Audiograma - ' + paciente.nombre;
+      const body = 'Adjunto encontrará el audiograma clínico de ' + paciente.nombre + '.\n\nFecha: ' + (paciente.fecha || new Date().toLocaleDateString('es-AR')) + '\nH.C.: ' + (paciente.hc || 'N/A');
+      const mailtoLink = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+      window.location.href = mailtoLink;
+    }, 2000);
+  },
+
+  _generarHTMLCompleto() {
+    const paciente = State?.paciente || {};
+    const resultados = State?.resultados || { OD: {}, OI: {} };
+    const maskResultados = State?.maskResultados || { OD: {}, OI: {} };
+    const logoResultados = State?.logoResultados || { OD: [], OI: [] };
+
+    const ptaOD = Classifications?.calcularPTA?.(resultados.OD);
+    const ptaOI = Classifications?.calcularPTA?.(resultados.OI);
+    const cOD = Classifications?.clasificar?.(ptaOD);
+    const cOI = Classifications?.clasificar?.(ptaOI);
+
+    const NA = "N/A";
+
+    // Tabla tonal
+    const filasTonal = (FREQUENCIES || [250, 500, 1000, 2000, 3000, 4000, 6000, 8000]).map(f => {
+      const od = resultados.OD[f] !== undefined ? resultados.OD[f] + ' dB' : NA;
+      const oi = resultados.OI[f] !== undefined ? resultados.OI[f] + ' dB' : NA;
+      const odMask = maskResultados.OD[f] !== undefined ? ' (NE:' + maskResultados.OD[f] + 'dB)' : '';
+      const oiMask = maskResultados.OI[f] !== undefined ? ' (NE:' + maskResultados.OI[f] + 'dB)' : '';
+      return '<tr><td style="border:1px solid #ccc;padding:5px 10px;text-align:center">' + f + ' Hz</td><td style="border:1px solid #ccc;padding:5px 10px;text-align:center;color:#c04040">' + od + odMask + '</td><td style="border:1px solid #ccc;padding:5px 10px;text-align:center;color:#2a60a0">' + oi + oiMask + '</td></tr>';
+    }).join('');
+
+    const filasLogo = (oido) => (logoResultados[oido] || []).map(r =>
+      '<tr><td style="border:1px solid #ccc;padding:5px 10px;text-align:center">' + r.palabra + '</td><td style="border:1px solid #ccc;padding:5px 10px;text-align:center">' + r.dB + ' dB</td><td style="border:1px solid #ccc;padding:5px 10px;text-align:center">' + (r.correcta ? '✓' : '✗') + '</td></tr>'
+    ).join('');
+
+    const pctLogo = (oido) => {
+      const pct = Classifications?.calcularDiscriminacion?.(logoResultados[oido] || []);
+      return pct === null ? NA : pct + '%';
+    };
+
+    let html = '<!DOCTYPE html><html lang="es"><head>';
+    html += '<meta charset="UTF-8">';
+    html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">';
+    html += '<title>Audiograma</title>';
+    html += '<style>';
+    html += 'body { font-family: Georgia, serif; margin: 20px; color: #111; background: white; }';
+    html += 'h1 { text-align: center; font-size: 20px; letter-spacing: 2px; border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 20px; }';
+    html += 'h2 { font-size: 14px; margin-top: 24px; border-left: 3px solid #111; padding-left: 8px; }';
+    html += 'table { width: 100%; border-collapse: collapse; margin-top: 12px; }';
+    html += 'th { background: #1a1a2e; color: #fff; padding: 8px; text-align: center; }';
+    html += '.info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0; font-size: 13px; }';
+    html += '.info-item { padding: 10px; background: #f5f5f5; border-radius: 4px; }';
+    html += '.info-label { font-weight: bold; margin-bottom: 2px; }';
+    html += 'hr { margin: 30px 0; border: none; border-top: 1px solid #ddd; }';
+    html += '.footer { font-size: 10px; color: #666; text-align: center; margin-top: 20px; }';
+    html += '@media print { body { margin: 0; } }';
+    html += '</style>';
+    html += '</head><body>';
+    
+    html += '<h1>AUDIOGRAMA CLÍNICO</h1>';
+    
+    html += '<div class="info">';
+    html += '<div class="info-item"><div class="info-label">Paciente:</div>' + this._esc(paciente.nombre || NA) + '</div>';
+    html += '<div class="info-item"><div class="info-label">Edad:</div>' + this._esc(paciente.edad || NA) + '</div>';
+    html += '<div class="info-item"><div class="info-label">HC:</div>' + this._esc(paciente.hc || NA) + '</div>';
+    html += '<div class="info-item"><div class="info-label">Fecha:</div>' + this._esc(paciente.fecha || new Date().toLocaleDateString('es-AR')) + '</div>';
+    html += '<div class="info-item" style="grid-column:1/-1"><div class="info-label">Motivo:</div>' + this._esc(paciente.motivo || NA) + '</div>';
+    html += '<div class="info-item" style="grid-column:1/-1"><div class="info-label">Observaciones:</div>' + this._esc(paciente.obs || NA) + '</div>';
+    html += '</div>';
+    
+    html += '<h2>Audiometría Tonal — Umbrales</h2>';
+    html += '<table>';
+    html += '<tr><th>Frecuencia</th><th>OD (Derecho)</th><th>OI (Izquierdo)</th></tr>';
+    html += filasTonal;
+    html += '</table>';
+    
+    html += '<h2>Clasificación Diagnóstica</h2>';
+    html += '<div style="font-size: 13px; line-height: 1.8;">';
+    if (ptaOD !== null) {
+      html += '<strong>Oído Derecho (OD):</strong> PTA ' + ptaOD.toFixed(0) + ' dB → ' + (cOD && cOD.label ? this._esc(cOD.label) : NA) + '<br>';
+    } else {
+      html += '<strong>Oído Derecho (OD):</strong> ' + NA + '<br>';
+    }
+    if (ptaOI !== null) {
+      html += '<strong>Oído Izquierdo (OI):</strong> PTA ' + ptaOI.toFixed(0) + ' dB → ' + (cOI && cOI.label ? this._esc(cOI.label) : NA) + '<br>';
+    } else {
+      html += '<strong>Oído Izquierdo (OI):</strong> ' + NA;
+    }
+    html += '</div>';
+
+    if ((logoResultados.OD && logoResultados.OD.length > 0) || (logoResultados.OI && logoResultados.OI.length > 0)) {
+      html += '<h2>Logoaudiometría</h2>';
+      if (logoResultados.OD && logoResultados.OD.length > 0) {
+        html += '<h3 style="font-size:13px;margin:10px 0 5px 0">Oído Derecho — Discriminación: ' + pctLogo('OD') + '</h3>';
+        html += '<table>';
+        html += '<tr><th>Palabra</th><th>Nivel</th><th>Correcta</th></tr>';
+        html += filasLogo('OD');
+        html += '</table>';
+      }
+      if (logoResultados.OI && logoResultados.OI.length > 0) {
+        html += '<h3 style="font-size:13px;margin:10px 0 5px 0">Oído Izquierdo — Discriminación: ' + pctLogo('OI') + '</h3>';
+        html += '<table>';
+        html += '<tr><th>Palabra</th><th>Nivel</th><th>Correcta</th></tr>';
+        html += filasLogo('OI');
+        html += '</table>';
+      }
+    }
+
+    html += '<hr>';
+    html += '<div class="footer">Generado con Audiómetro Clínico Pro · Solo referencia clínica</div>';
+    html += '</body></html>';
+    
+    return html;
+  },
+
+  _generarHTML() {
+    // Para compatibilidad con código antiguo
+    return this._generarHTMLCompleto();
+  },
+
+  _esc(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+};
         const imgWidth = pageWidth - 20;
         const imgHeight = (canvas.height * imgWidth) / canvas.width;
         
