@@ -1,253 +1,196 @@
 /**
  * PDF.JS
- * Generación de informe audiométrico para exportar como PDF.
- *
- * Estrategia: genera un HTML completo de impresión en una ventana nueva
- * y llama a window.print() para que el navegador lo renderice limpiamente.
- * Esto evita los problemas de corte de contenido que tiene html2pdf.js.
- *
- * El usuario puede imprimir o "Guardar como PDF" desde el diálogo del navegador.
+ * Generación de PDF para Android PWA con jsPDF + html2canvas
+ * 
+ * Estrategia: Usar html2canvas para renderizar el HTML a canvas/imagen,
+ * luego agregar esa imagen a un PDF con jsPDF.
+ * Esto funciona mucho mejor en Android que window.print()
  */
 
 const PDF = {
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PÚBLICO
-  // ─────────────────────────────────────────────────────────────────────────
-
-descargar() {
-
-  try {
-
-    // eliminar iframe previo
-    const oldFrame =
-      document.getElementById("print-frame");
-
-    if (oldFrame) {
-      oldFrame.remove();
-    }
-
-    // crear iframe oculto
-    const iframe =
-      document.createElement("iframe");
-
-    iframe.id = "print-frame";
-
-    iframe.style.position = "fixed";
-    iframe.style.right = "0";
-    iframe.style.bottom = "0";
-
-    iframe.style.width = "0";
-    iframe.style.height = "0";
-
-    iframe.style.border = "0";
-
-    document.body.appendChild(iframe);
-
-    const doc =
-      iframe.contentWindow.document;
-
-    // ─────────────────────────────
-    // CLONAR ESTILOS DEL DOCUMENTO
-    // ─────────────────────────────
-    const styles =
-      Array.from(document.querySelectorAll(
-        'link[rel="stylesheet"], style'
-      ))
-      .map(el => el.outerHTML)
-      .join("\n");
-
-    // ─────────────────────────────
-    // HTML DEL REPORTE
-    // ─────────────────────────────
-    const html =
-      this._generarHTML();
-
-    // ─────────────────────────────
-    // ESCRIBIR DOCUMENTO COMPLETO
-    // ─────────────────────────────
-    doc.open();
-
-    doc.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-
-        ${styles}
-
-        <style>
-
-          @page {
-            size: A4;
-            margin: 10mm;
-          }
-
-          body {
-            background: white;
-          }
-
-        </style>
-
-      </head>
-      <body>
-
-        ${html}
-
-      </body>
-      </html>
-    `);
-
-    doc.close();
-
-    // ─────────────────────────────
-    // ESPERAR CARGA
-    // ─────────────────────────────
-    iframe.onload = () => {
-
-      setTimeout(() => {
-
-        try {
-
-          iframe.contentWindow.focus();
-
-          iframe.contentWindow.print();
-
-          UI?.showMsg?.(
-            "msg-resultado",
-            "✓ Preparando PDF...",
-            "#10b981"
-          );
-
-        } catch (err) {
-
-          console.error(err);
-
-          alert(
-            "No se pudo abrir impresión."
-          );
-
+  descargar() {
+    try {
+      // Crear contenedor temporal
+      const tempDiv = document.createElement('div');
+      tempDiv.id = 'pdf-temp-container';
+      tempDiv.style.position = 'fixed';
+      tempDiv.style.top = '-9999px';
+      tempDiv.style.left = '-9999px';
+      tempDiv.style.width = '210mm';
+      tempDiv.style.backgroundColor = 'white';
+      
+      // Generar HTML del reporte
+      const html = this._generarHTML();
+      tempDiv.innerHTML = html;
+      
+      document.body.appendChild(tempDiv);
+      
+      // Mostrar mensaje de carga
+      UI?.showMsg?.('msg-resultado', '⏳ Generando PDF...', '#3b82f6');
+      
+      // Usar html2canvas para convertir a imagen
+      html2canvas(tempDiv, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff'
+      }).then(canvas => {
+        
+        // Crear PDF
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4'
+        });
+        
+        const imgData = canvas.toDataURL('image/png');
+        const pageWidth = pdf.internal.pageSize.getWidth();
+        const pageHeight = pdf.internal.pageSize.getHeight();
+        const imgWidth = pageWidth - 20;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+        
+        let heightLeft = imgHeight;
+        let position = 10;
+        
+        // Agregar imagen al PDF, dividiendo en múltiples páginas si es necesario
+        pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+        
+        while (heightLeft > 0) {
+          position = heightLeft - imgHeight;
+          pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
+          heightLeft -= pageHeight;
         }
+        
+        // Descargar PDF
+        const paciente = State?.paciente || {};
+        const filename = `Audiograma_${paciente.nombre || 'Paciente'}_${new Date().toISOString().split('T')[0]}.pdf`;
+        pdf.save(filename);
+        
+        // Limpiar
+        document.body.removeChild(tempDiv);
+        
+        UI?.showMsg?.('msg-resultado', '✓ PDF descargado', '#10b981');
+        
+      }).catch(error => {
+        console.error('Error generando PDF:', error);
+        document.body.removeChild(tempDiv);
+        alert('Error generando PDF: ' + error.message);
+        UI?.showMsg?.('msg-resultado', '✗ Error al generar PDF', '#ef4444');
+      });
+      
+    } catch (err) {
+      console.error('Error:', err);
+      alert('Error: ' + err.message);
+    }
+  },
 
-      }, 1200);
+  enviarPorCorreo() {
+    // Descargar y luego abrir cliente de correo
+    this.descargar();
+    
+    setTimeout(() => {
+      const paciente = State?.paciente || {};
+      const subject = 'Audiograma - ' + (paciente.nombre || 'Paciente');
+      const body = 'Adjunto encontrará el audiograma clínico de ' + paciente.nombre + '.\n\nFecha: ' + (paciente.fecha || new Date().toLocaleDateString('es-AR')) + '\nH.C.: ' + (paciente.hc || 'N/A');
+      const mailtoLink = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+      window.location.href = mailtoLink;
+    }, 2000);
+  },
 
+  _generarHTML() {
+    const paciente = State?.paciente || {};
+    const resultados = State?.resultados || { OD: {}, OI: {} };
+    const maskResultados = State?.maskResultados || { OD: {}, OI: {} };
+    const logoResultados = State?.logoResultados || { OD: [], OI: [] };
+
+    const ptaOD = Classifications?.calcularPTA?.(resultados.OD);
+    const ptaOI = Classifications?.calcularPTA?.(resultados.OI);
+    const cOD = Classifications?.clasificar?.(ptaOD);
+    const cOI = Classifications?.clasificar?.(ptaOI);
+
+    const NA = "N/A";
+
+    // Tabla tonal
+    const filasTonal = (FREQUENCIES || [250, 500, 1000, 2000, 3000, 4000, 6000, 8000]).map(f => {
+      const od = resultados.OD[f] !== undefined ? resultados.OD[f] + ' dB' : NA;
+      const oi = resultados.OI[f] !== undefined ? resultados.OI[f] + ' dB' : NA;
+      const odMask = maskResultados.OD[f] !== undefined ? ' (NE:' + maskResultados.OD[f] + 'dB)' : '';
+      const oiMask = maskResultados.OI[f] !== undefined ? ' (NE:' + maskResultados.OI[f] + 'dB)' : '';
+      return '<tr><td>' + f + ' Hz</td><td style="color:#c04040">' + od + odMask + '</td><td style="color:#2a60a0">' + oi + oiMask + '</td></tr>';
+    }).join('');
+
+    const filasLogo = (oido) => (logoResultados[oido] || []).map(r =>
+      '<tr><td>' + r.palabra + '</td><td>' + r.dB + ' dB</td><td>' + (r.correcta ? '✓' : '✗') + '</td></tr>'
+    ).join('');
+
+    const pctLogo = (oido) => {
+      const pct = Classifications?.calcularDiscriminacion?.(logoResultados[oido] || []);
+      return pct === null ? NA : pct + '%';
     };
 
-  } catch (err) {
-
-    console.error(err);
-
-    alert(
-      "Error generando PDF."
-    );
-
-  }
-
-},
-
-  /** Alias para compatibilidad con el botón "Enviar por Correo" */
-  enviarPorCorreo() {
-    this.descargar();
-  },
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // SVG AUDIOGRAMA
-  // ─────────────────────────────────────────────────────────────────────────
-
-  /** Crea un tag SVG como string */
-  _t(tag, attrs, text) {
-    const attrStr = Object.entries(attrs)
-      .map(([k, v]) => `${k}="${v}"`)
-      .join(" ");
-    if (text !== undefined) {
-      return `<${tag} ${attrStr}>${String(text)}</${tag}>`;
+    let html = '<div style="font-family:Georgia,serif;background:white;padding:20px;color:#111">';
+    
+    html += '<h1 style="text-align:center;font-size:20px;letter-spacing:2px;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:4px">AUDIOGRAMA CLÍNICO</h1>';
+    
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0;font-size:12px">';
+    html += '<div style="padding:6px 10px;background:#f5f5f5;border-radius:4px"><strong>Paciente:</strong> ' + (this._esc(paciente.nombre) || NA) + '</div>';
+    html += '<div style="padding:6px 10px;background:#f5f5f5;border-radius:4px"><strong>Edad:</strong> ' + (this._esc(paciente.edad) || NA) + '</div>';
+    html += '<div style="padding:6px 10px;background:#f5f5f5;border-radius:4px"><strong>HC:</strong> ' + (this._esc(paciente.hc) || NA) + '</div>';
+    html += '<div style="padding:6px 10px;background:#f5f5f5;border-radius:4px"><strong>Fecha:</strong> ' + (this._esc(paciente.fecha) || new Date().toLocaleDateString('es-AR')) + '</div>';
+    html += '<div style="grid-column:1/-1;padding:6px 10px;background:#f5f5f5;border-radius:4px"><strong>Motivo:</strong> <span style="color:#555">' + (this._esc(paciente.motivo) || NA) + '</span></div>';
+    html += '<div style="grid-column:1/-1;padding:6px 10px;background:#f5f5f5;border-radius:4px"><strong>Obs:</strong> <span style="color:#555">' + (this._esc(paciente.obs) || NA) + '</span></div>';
+    html += '</div>';
+    
+    html += '<h2 style="font-size:14px;margin-top:24px;border-left:3px solid #111;padding-left:8px">Audiometría Tonal — Umbrales</h2>';
+    html += '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:12px"><tr><th style="background:#1a1a2e;color:#fff;padding:7px">Frecuencia</th><th style="background:#1a1a2e;color:#fff;padding:7px">OD (Derecho)</th><th style="background:#1a1a2e;color:#fff;padding:7px">OI (Izquierdo)</th></tr>' + filasTonal + '</table>';
+    
+    html += '<h2 style="font-size:14px;margin-top:24px;border-left:3px solid #111;padding-left:8px">Clasificación Diagnóstica</h2>';
+    html += '<p style="font-size:12px;margin-top:8px">';
+    if (ptaOD !== null) {
+      html += '<strong>OD — PTA: ' + ptaOD.toFixed(0) + ' dB → ' + (cOD && cOD.label ? this._esc(cOD.label) : NA) + '</strong><br>';
+    } else {
+      html += 'OD: ' + NA + '<br>';
     }
-    return `<${tag} ${attrStr}/>`;
+    if (ptaOI !== null) {
+      html += '<strong>OI — PTA: ' + ptaOI.toFixed(0) + ' dB → ' + (cOI && cOI.label ? this._esc(cOI.label) : NA) + '</strong>';
+    } else {
+      html += 'OI: ' + NA;
+    }
+    html += '</p>';
+
+    if ((logoResultados.OD && logoResultados.OD.length > 0) || (logoResultados.OI && logoResultados.OI.length > 0)) {
+      html += '<h2 style="font-size:14px;margin-top:24px;border-left:3px solid #111;padding-left:8px">Logoaudiometría</h2>';
+      if (logoResultados.OD && logoResultados.OD.length > 0) {
+        html += '<p style="font-size:12px"><strong>Oído Derecho — Discriminación: ' + pctLogo('OD') + '</strong></p>';
+        html += '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:12px"><tr><th style="background:#1a1a2e;color:#fff;padding:7px">Palabra</th><th style="background:#1a1a2e;color:#fff;padding:7px">Nivel</th><th style="background:#1a1a2e;color:#fff;padding:7px">Correcta</th></tr>' + filasLogo('OD') + '</table>';
+      }
+      if (logoResultados.OI && logoResultados.OI.length > 0) {
+        html += '<p style="font-size:12px;margin-top:12px"><strong>Oído Izquierdo — Discriminación: ' + pctLogo('OI') + '</strong></p>';
+        html += '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:12px"><tr><th style="background:#1a1a2e;color:#fff;padding:7px">Palabra</th><th style="background:#1a1a2e;color:#fff;padding:7px">Nivel</th><th style="background:#1a1a2e;color:#fff;padding:7px">Correcta</th></tr>' + filasLogo('OI') + '</table>';
+      }
+    }
+
+    html += '<br><hr style="margin-top:30px">';
+    html += '<p style="font-size:10px;color:#666;text-align:center">Generado con Audiómetro Clínico Pro · Solo referencia clínica</p>';
+    html += '</div>';
+    
+    return html;
   },
 
-  /**
-   * Genera el SVG del audiograma como string HTML.
-   * Incluye las 8 frecuencias estándar en la escala horizontal.
-   */
-  _generarSVGAudiograma(resultados, maskResultados) {
-    const SVG_W   = 560;
-    const SVG_H   = 320;
-    const PAD_L   = 52;
-    const PAD_R   = 20;
-    const PAD_T   = 24;
-    const PAD_B   = 36;
-    const CHART_W = SVG_W - PAD_L - PAD_R;
-    const CHART_H = SVG_H - PAD_T - PAD_B;
-    const DB_MIN  = -10;
-    const DB_MAX  = 120;
-
-    // Frecuencias completas para el audiograma clínico
-    const FREQS = [250, 500, 1000, 2000, 3000, 4000, 6000, 8000];
-
-    const C_OD   = "#c03030";
-    const C_OI   = "#1a55a8";
-    const C_OD_M = "#d4880a";
-    const C_OI_M = "#0891b2";
-
-    const xPos = (i)  => PAD_L + (i / (FREQS.length - 1)) * CHART_W;
-    const yPos = (db) => PAD_T + ((db - DB_MIN) / (DB_MAX - DB_MIN)) * CHART_H;
-    const t    = this._t.bind(this);
-
-    let els = [];
-
-    // ── Fondo zona audición normal (≤ 25 dB) ──────────────────────────────
-    els.push(t("rect", {
-      x: PAD_L, y: yPos(DB_MIN).toFixed(1),
-      width: CHART_W,
-      height: (yPos(25) - yPos(DB_MIN)).toFixed(1),
-      fill: "rgba(180,230,180,0.25)"
-    }));
-
-    // ── Marco del gráfico ─────────────────────────────────────────────────
-    els.push(t("rect", {
-      x: PAD_L, y: PAD_T,
-      width: CHART_W, height: CHART_H,
-      fill: "none",
-      stroke: "rgba(15,23,42,0.3)",
-      "stroke-width": 1
-    }));
-
-    // ── Grid horizontal (líneas de dB) ────────────────────────────────────
-    [-10, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120].forEach(db => {
-      const y     = yPos(db).toFixed(1);
-      const isBold = db === 0;
-      els.push(t("line", {
-        x1: PAD_L, y1: y,
-        x2: SVG_W - PAD_R, y2: y,
-        stroke: "rgba(15,23,42,0.18)",
-        "stroke-width": isBold ? 1.2 : 0.6,
-        "stroke-dasharray": db === 25 ? "3,3" : "none"
-      }));
-      els.push(t("text", {
-        x: PAD_L - 5, y: y,
-        "text-anchor": "end",
-        "dominant-baseline": "middle",
-        fill: "rgba(15,23,42,0.65)",
-        "font-size": 9,
-        "font-family": "Arial,Helvetica,sans-serif"
-      }, String(db)));
-    });
-
-    // ── Grid vertical (líneas de frecuencia) ──────────────────────────────
-    FREQS.forEach((f, i) => {
-      const x = xPos(i).toFixed(1);
-      els.push(t("line", {
-        x1: x, y1: PAD_T,
-        x2: x, y2: SVG_H - PAD_B,
-        stroke: "rgba(15,23,42,0.18)",
-        "stroke-width": 0.6
-      }));
-      els.push(t("text", {
-        x: x, y: SVG_H - PAD_B + 14,
-        "text-anchor": "middle",
-        fill: "rgba(15,23,42,0.65)",
-        "font-size": 9,
-        "font-family": "Arial,Helvetica,sans-serif"
-      }, f >= 1000 ? `${f / 1000}k` : String(f)));
+  _esc(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+};
     });
 
     // ── Etiquetas de ejes ─────────────────────────────────────────────────
