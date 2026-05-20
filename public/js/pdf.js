@@ -15,26 +15,117 @@ const PDF = {
   // PÚBLICO
   // ─────────────────────────────────────────────────────────────────────────
 
-  /** Abre ventana de impresión/PDF */
-  descargar() {
-    const win = window.open("", "_blank");
-    if (!win) {
-      alert("El navegador bloqueó la ventana emergente. Habilitá las ventanas emergentes para este sitio.");
-      return;
+descargar() {
+
+  try {
+
+    // ─────────────────────────────────────────────
+    // Eliminar iframe anterior si existe
+    // ─────────────────────────────────────────────
+    const oldFrame =
+      document.getElementById("pdf-print-frame");
+
+    if (oldFrame) {
+      oldFrame.remove();
     }
-    win.document.write(this._generarHTML());
-    win.document.close();
 
-    // Esperamos a que carguen estilos e imágenes antes de imprimir
-    win.addEventListener("load", () => {
+    // ─────────────────────────────────────────────
+    // Crear iframe oculto
+    // ─────────────────────────────────────────────
+    const iframe =
+      document.createElement("iframe");
+
+    iframe.id = "pdf-print-frame";
+
+    iframe.style.position = "fixed";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+
+    iframe.style.border = "0";
+
+    iframe.style.opacity = "0";
+
+    // IMPORTANTE para Android
+    iframe.setAttribute("sandbox",
+      "allow-modals allow-same-origin");
+
+    document.body.appendChild(iframe);
+
+    // ─────────────────────────────────────────────
+    // Obtener documento interno
+    // ─────────────────────────────────────────────
+    const iframeWindow =
+      iframe.contentWindow;
+
+    const iframeDoc =
+      iframeWindow.document;
+
+    // ─────────────────────────────────────────────
+    // Escribir HTML completo
+    // ─────────────────────────────────────────────
+    iframeDoc.open();
+
+    iframeDoc.write(
+      this._generarHTML()
+    );
+
+    iframeDoc.close();
+
+    // ─────────────────────────────────────────────
+    // Esperar carga completa
+    // ─────────────────────────────────────────────
+    iframe.onload = () => {
+
+      // tiempo extra para Android
       setTimeout(() => {
-        win.focus();
-        win.print();
-      }, 400);
-    });
 
-    UI?.showMsg?.("msg-resultado", "✓ Ventana de impresión abierta", "#10b981");
-  },
+        try {
+
+          iframeWindow.focus();
+
+          // abrir diálogo imprimir/PDF
+          iframeWindow.print();
+
+          UI?.showMsg?.(
+            "msg-resultado",
+            "✓ Preparando PDF...",
+            "#10b981"
+          );
+
+        } catch (err) {
+
+          console.error(
+            "Error al imprimir:",
+            err
+          );
+
+          alert(
+            "No se pudo abrir el diálogo de impresión."
+          );
+
+        }
+
+      }, 700);
+
+    };
+
+  } catch (err) {
+
+    console.error(
+      "Error generando PDF:",
+      err
+    );
+
+    alert(
+      "Ocurrió un error al generar el PDF."
+    );
+
+  }
+
+},
 
   /** Alias para compatibilidad con el botón "Enviar por Correo" */
   enviarPorCorreo() {
