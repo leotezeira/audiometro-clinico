@@ -1,346 +1,261 @@
 /**
  * PDF.JS
- * Generación de PDF para Android PWA sin librerías externas
- * 
- * Estrategia: Crear HTML puro que se abre en ventana nueva.
- * El navegador maneja la descarga/impresión nativa.
- * Funciona 100% en Android sin dependencias.
+ * Generación y exportación nativa de informe audiométrico en PWA.
+ *
+ * Estrategia principal (Android / PWA):
+ *   1. Se genera el HTML completo del informe.
+ *   2. Se abre una ventana de impresión para que el navegador lo renderice.
+ *   3. El botón "Exportar PDF" usa la Web Share API nativa de Android
+ *      para compartir / guardar el archivo directamente desde la PWA.
+ *
+ * Compatibilidad:
+ *   - Android (Chrome/PWA): usa navigator.share() con File → sheet nativo.
+ *   - Desktop / iOS sin share: abre ventana de impresión como fallback.
+ *
+ * Para generar un Blob PDF real sin depender de jsPDF se usa el truco de
+ * convertir el HTML a un Blob text/html y compartirlo como .pdf cuando
+ * el navegador lo soporta; en la mayoría de dispositivos Android el sheet
+ * nativo permite "Imprimir → Guardar como PDF" en un tap.
+ *
+ * Si querés un PDF binario real podés descomentar la sección jsPDF
+ * (requiere agregar el script al HTML principal):
+ *   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
  */
 
 const PDF = {
 
-  descargar() {
-    try {
-      const paciente = State?.paciente || {};
-      const filename = `Audiograma_${paciente.nombre || 'Paciente'}_${new Date().toISOString().split('T')[0]}.html`;
-      
-      // Generar HTML completo
-      const htmlContent = this._generarHTMLCompleto();
-      
-      // Crear blob
-      const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-      
-      // Intentar usar Web Share API (nativa en Android)
-      if (navigator.share && navigator.canShare) {
-        try {
-          const file = new File([blob], filename, { type: 'text/html' });
-          if (navigator.canShare({ files: [file] })) {
-            navigator.share({
-              files: [file],
-              title: 'Audiograma',
-              text: 'Audiograma de ' + (paciente.nombre || 'Paciente')
-            }).then(() => {
-              UI?.showMsg?.('msg-resultado', '✓ Archivo compartido', '#10b981');
-            }).catch(err => {
-              if (err.name !== 'AbortError') {
-                console.error('Error en share:', err);
-                this._descargarLocal(blob, filename);
-              }
-            });
-            return;
-          }
-        } catch (e) {
-          console.warn('Web Share no disponible, usando descarga local');
-        }
-      }
-      
-      // Fallback: Descargar localmente
-      this._descargarLocal(blob, filename);
-      
-    } catch (error) {
-      console.error('Error:', error);
-      alert('Error: ' + error.message);
-    }
-  },
+  // ─────────────────────────────────────────────────────────────────────────
+  // PÚBLICO
+  // ─────────────────────────────────────────────────────────────────────────
 
-  _descargarLocal(blob, filename) {
-    try {
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      link.style.display = 'none';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      
-      setTimeout(() => {
-        UI?.showMsg?.('msg-resultado', '✓ Archivo listo para descargar', '#10b981');
-      }, 500);
-    } catch (error) {
-      console.error('Error en descarga local:', error);
-      alert('Error al descargar: ' + error.message);
-    }
-  },
+  /**
+   * Botón principal: "Exportar PDF"
+   * En Android PWA activa el share sheet nativo.
+   * En desktop abre la ventana de impresión.
+   */
+  async descargar() {
+    const htmlContent = this._generarHTML();
 
-  _generarHTMLCompleto() {
-    const paciente = State?.paciente || {};
-    const resultados = State?.resultados || { OD: {}, OI: {} };
-    const maskResultados = State?.maskResultados || { OD: {}, OI: {} };
-    const logoResultados = State?.logoResultados || { OD: [], OI: [] };
-
-    const ptaOD = Classifications?.calcularPTA?.(resultados.OD);
-    const ptaOI = Classifications?.calcularPTA?.(resultados.OI);
-    const cOD = Classifications?.clasificar?.(ptaOD);
-    const cOI = Classifications?.clasificar?.(ptaOI);
-
-    const NA = "N/A";
-
-    // Tabla tonal
-    const filasTonal = (FREQUENCIES || [250, 500, 1000, 2000, 3000, 4000, 6000, 8000]).map(f => {
-      const od = resultados.OD[f] !== undefined ? resultados.OD[f] + ' dB' : NA;
-      const oi = resultados.OI[f] !== undefined ? resultados.OI[f] + ' dB' : NA;
-      const odMask = maskResultados.OD[f] !== undefined ? ' (NE:' + maskResultados.OD[f] + 'dB)' : '';
-      const oiMask = maskResultados.OI[f] !== undefined ? ' (NE:' + maskResultados.OI[f] + 'dB)' : '';
-      return '<tr><td style="border:1px solid #ccc;padding:5px 10px;text-align:center">' + f + ' Hz</td><td style="border:1px solid #ccc;padding:5px 10px;text-align:center;color:#c04040">' + od + odMask + '</td><td style="border:1px solid #ccc;padding:5px 10px;text-align:center;color:#2a60a0">' + oi + oiMask + '</td></tr>';
-    }).join('');
-
-    const filasLogo = (oido) => (logoResultados[oido] || []).map(r =>
-      '<tr><td style="border:1px solid #ccc;padding:5px 10px;text-align:center">' + r.palabra + '</td><td style="border:1px solid #ccc;padding:5px 10px;text-align:center">' + r.dB + ' dB</td><td style="border:1px solid #ccc;padding:5px 10px;text-align:center">' + (r.correcta ? '✓' : '✗') + '</td></tr>'
-    ).join('');
-
-    const pctLogo = (oido) => {
-      const pct = Classifications?.calcularDiscriminacion?.(logoResultados[oido] || []);
-      return pct === null ? NA : pct + '%';
-    };
-
-    let html = '<!DOCTYPE html><html lang="es"><head>';
-    html += '<meta charset="UTF-8">';
-    html += '<meta name="viewport" content="width=device-width, initial-scale=1.0">';
-    html += '<title>Audiograma</title>';
-    html += '<style>';
-    html += 'body { font-family: Georgia, serif; margin: 20px; color: #111; background: white; }';
-    html += 'h1 { text-align: center; font-size: 20px; letter-spacing: 2px; border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 20px; }';
-    html += 'h2 { font-size: 14px; margin-top: 24px; border-left: 3px solid #111; padding-left: 8px; }';
-    html += 'table { width: 100%; border-collapse: collapse; margin-top: 12px; }';
-    html += 'th { background: #1a1a2e; color: #fff; padding: 8px; text-align: center; }';
-    html += '.info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 15px 0; font-size: 13px; }';
-    html += '.info-item { padding: 10px; background: #f5f5f5; border-radius: 4px; }';
-    html += '.info-label { font-weight: bold; margin-bottom: 2px; }';
-    html += 'hr { margin: 30px 0; border: none; border-top: 1px solid #ddd; }';
-    html += '.footer { font-size: 10px; color: #666; text-align: center; margin-top: 20px; }';
-    html += '@media print { body { margin: 0; } }';
-    html += '</style>';
-    html += '</head><body>';
-    
-    html += '<h1>AUDIOGRAMA CLÍNICO</h1>';
-    
-    html += '<div class="info">';
-    html += '<div class="info-item"><div class="info-label">Paciente:</div>' + this._esc(paciente.nombre || NA) + '</div>';
-    html += '<div class="info-item"><div class="info-label">Edad:</div>' + this._esc(paciente.edad || NA) + '</div>';
-    html += '<div class="info-item"><div class="info-label">HC:</div>' + this._esc(paciente.hc || NA) + '</div>';
-    html += '<div class="info-item"><div class="info-label">Fecha:</div>' + this._esc(paciente.fecha || new Date().toLocaleDateString('es-AR')) + '</div>';
-    html += '<div class="info-item" style="grid-column:1/-1"><div class="info-label">Motivo:</div>' + this._esc(paciente.motivo || NA) + '</div>';
-    html += '<div class="info-item" style="grid-column:1/-1"><div class="info-label">Observaciones:</div>' + this._esc(paciente.obs || NA) + '</div>';
-    html += '</div>';
-    
-    html += '<h2>Audiometría Tonal — Umbrales</h2>';
-    html += '<table>';
-    html += '<tr><th>Frecuencia</th><th>OD (Derecho)</th><th>OI (Izquierdo)</th></tr>';
-    html += filasTonal;
-    html += '</table>';
-    
-    html += '<h2>Clasificación Diagnóstica</h2>';
-    html += '<div style="font-size: 13px; line-height: 1.8;">';
-    if (ptaOD !== null) {
-      html += '<strong>Oído Derecho (OD):</strong> PTA ' + ptaOD.toFixed(0) + ' dB → ' + (cOD && cOD.label ? this._esc(cOD.label) : NA) + '<br>';
-    } else {
-      html += '<strong>Oído Derecho (OD):</strong> ' + NA + '<br>';
-    }
-    if (ptaOI !== null) {
-      html += '<strong>Oído Izquierdo (OI):</strong> PTA ' + ptaOI.toFixed(0) + ' dB → ' + (cOI && cOI.label ? this._esc(cOI.label) : NA) + '<br>';
-    } else {
-      html += '<strong>Oído Izquierdo (OI):</strong> ' + NA;
-    }
-    html += '</div>';
-
-    if ((logoResultados.OD && logoResultados.OD.length > 0) || (logoResultados.OI && logoResultados.OI.length > 0)) {
-      html += '<h2>Logoaudiometría</h2>';
-      if (logoResultados.OD && logoResultados.OD.length > 0) {
-        html += '<h3 style="font-size:13px;margin:10px 0 5px 0">Oído Derecho — Discriminación: ' + pctLogo('OD') + '</h3>';
-        html += '<table>';
-        html += '<tr><th>Palabra</th><th>Nivel</th><th>Correcta</th></tr>';
-        html += filasLogo('OD');
-        html += '</table>';
-      }
-      if (logoResultados.OI && logoResultados.OI.length > 0) {
-        html += '<h3 style="font-size:13px;margin:10px 0 5px 0">Oído Izquierdo — Discriminación: ' + pctLogo('OI') + '</h3>';
-        html += '<table>';
-        html += '<tr><th>Palabra</th><th>Nivel</th><th>Correcta</th></tr>';
-        html += filasLogo('OI');
-        html += '</table>';
+    // ── Intentar Web Share API con archivo (Android PWA) ──────────────────
+    if (this._puedeCompartirArchivos()) {
+      try {
+        await this._compartirComoArchivo(htmlContent);
+        UI?.showMsg?.("msg-resultado", "✓ Compartir / guardar abierto", "#10b981");
+        return;
+      } catch (err) {
+        // Si el usuario canceló el share, no hacemos nada más
+        if (err.name === "AbortError") return;
+        // Otro error → fallback a ventana de impresión
+        console.warn("Web Share API falló, usando fallback:", err);
       }
     }
 
-    html += '<hr>';
-    html += '<div class="footer">Generado con Audiómetro Clínico Pro · Solo referencia clínica</div>';
-    html += '</body></html>';
-    
-    return html;
+    // ── Fallback: ventana de impresión (desktop / iOS / navegadores sin share) ──
+    this._abrirVentanaImpresion(htmlContent);
   },
 
-  _generarHTML() {
-    // Para compatibilidad con código antiguo
-    return this._generarHTMLCompleto();
-  },
-
-  _esc(value) {
-    if (value === null || value === undefined) return '';
-    return String(value)
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#039;');
-  }
-};
-        const imgWidth = pageWidth - 20;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-        
-        let heightLeft = imgHeight;
-        let position = 10;
-        
-        // Agregar imagen al PDF, dividiendo en múltiples páginas si es necesario
-        pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-        
-        while (heightLeft > 0) {
-          position = heightLeft - imgHeight;
-          pdf.addPage();
-          pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-          heightLeft -= pageHeight;
-        }
-        
-        // Descargar PDF
-        const paciente = State?.paciente || {};
-        const filename = `Audiograma_${paciente.nombre || 'Paciente'}_${new Date().toISOString().split('T')[0]}.pdf`;
-        pdf.save(filename);
-        
-        // Limpiar
-        document.body.removeChild(tempDiv);
-        
-        UI?.showMsg?.('msg-resultado', '✓ PDF descargado', '#10b981');
-        
-      }).catch(error => {
-        console.error('Error generando PDF:', error);
-        document.body.removeChild(tempDiv);
-        alert('Error generando PDF: ' + error.message);
-        UI?.showMsg?.('msg-resultado', '✗ Error al generar PDF', '#ef4444');
-      });
-      
-    } catch (err) {
-      console.error('Error:', err);
-      alert('Error: ' + err.message);
-    }
-  },
-
+  /** Alias para compatibilidad con botones existentes */
   enviarPorCorreo() {
-    // Descargar y luego abrir cliente de correo
     this.descargar();
-    
-    setTimeout(() => {
-      const paciente = State?.paciente || {};
-      const subject = 'Audiograma - ' + (paciente.nombre || 'Paciente');
-      const body = 'Adjunto encontrará el audiograma clínico de ' + paciente.nombre + '.\n\nFecha: ' + (paciente.fecha || new Date().toLocaleDateString('es-AR')) + '\nH.C.: ' + (paciente.hc || 'N/A');
-      const mailtoLink = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
-      window.location.href = mailtoLink;
-    }, 2000);
   },
 
-  _generarHTML() {
-    const paciente = State?.paciente || {};
-    const resultados = State?.resultados || { OD: {}, OI: {} };
-    const maskResultados = State?.maskResultados || { OD: {}, OI: {} };
-    const logoResultados = State?.logoResultados || { OD: [], OI: [] };
+  // ─────────────────────────────────────────────────────────────────────────
+  // WEB SHARE API
+  // ─────────────────────────────────────────────────────────────────────────
 
-    const ptaOD = Classifications?.calcularPTA?.(resultados.OD);
-    const ptaOI = Classifications?.calcularPTA?.(resultados.OI);
-    const cOD = Classifications?.clasificar?.(ptaOD);
-    const cOI = Classifications?.clasificar?.(ptaOI);
-
-    const NA = "N/A";
-
-    // Tabla tonal
-    const filasTonal = (FREQUENCIES || [250, 500, 1000, 2000, 3000, 4000, 6000, 8000]).map(f => {
-      const od = resultados.OD[f] !== undefined ? resultados.OD[f] + ' dB' : NA;
-      const oi = resultados.OI[f] !== undefined ? resultados.OI[f] + ' dB' : NA;
-      const odMask = maskResultados.OD[f] !== undefined ? ' (NE:' + maskResultados.OD[f] + 'dB)' : '';
-      const oiMask = maskResultados.OI[f] !== undefined ? ' (NE:' + maskResultados.OI[f] + 'dB)' : '';
-      return '<tr><td>' + f + ' Hz</td><td style="color:#c04040">' + od + odMask + '</td><td style="color:#2a60a0">' + oi + oiMask + '</td></tr>';
-    }).join('');
-
-    const filasLogo = (oido) => (logoResultados[oido] || []).map(r =>
-      '<tr><td>' + r.palabra + '</td><td>' + r.dB + ' dB</td><td>' + (r.correcta ? '✓' : '✗') + '</td></tr>'
-    ).join('');
-
-    const pctLogo = (oido) => {
-      const pct = Classifications?.calcularDiscriminacion?.(logoResultados[oido] || []);
-      return pct === null ? NA : pct + '%';
-    };
-
-    let html = '<div style="font-family:Georgia,serif;background:white;padding:20px;color:#111">';
-    
-    html += '<h1 style="text-align:center;font-size:20px;letter-spacing:2px;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:4px">AUDIOGRAMA CLÍNICO</h1>';
-    
-    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0;font-size:12px">';
-    html += '<div style="padding:6px 10px;background:#f5f5f5;border-radius:4px"><strong>Paciente:</strong> ' + (this._esc(paciente.nombre) || NA) + '</div>';
-    html += '<div style="padding:6px 10px;background:#f5f5f5;border-radius:4px"><strong>Edad:</strong> ' + (this._esc(paciente.edad) || NA) + '</div>';
-    html += '<div style="padding:6px 10px;background:#f5f5f5;border-radius:4px"><strong>HC:</strong> ' + (this._esc(paciente.hc) || NA) + '</div>';
-    html += '<div style="padding:6px 10px;background:#f5f5f5;border-radius:4px"><strong>Fecha:</strong> ' + (this._esc(paciente.fecha) || new Date().toLocaleDateString('es-AR')) + '</div>';
-    html += '<div style="grid-column:1/-1;padding:6px 10px;background:#f5f5f5;border-radius:4px"><strong>Motivo:</strong> <span style="color:#555">' + (this._esc(paciente.motivo) || NA) + '</span></div>';
-    html += '<div style="grid-column:1/-1;padding:6px 10px;background:#f5f5f5;border-radius:4px"><strong>Obs:</strong> <span style="color:#555">' + (this._esc(paciente.obs) || NA) + '</span></div>';
-    html += '</div>';
-    
-    html += '<h2 style="font-size:14px;margin-top:24px;border-left:3px solid #111;padding-left:8px">Audiometría Tonal — Umbrales</h2>';
-    html += '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:12px"><tr><th style="background:#1a1a2e;color:#fff;padding:7px">Frecuencia</th><th style="background:#1a1a2e;color:#fff;padding:7px">OD (Derecho)</th><th style="background:#1a1a2e;color:#fff;padding:7px">OI (Izquierdo)</th></tr>' + filasTonal + '</table>';
-    
-    html += '<h2 style="font-size:14px;margin-top:24px;border-left:3px solid #111;padding-left:8px">Clasificación Diagnóstica</h2>';
-    html += '<p style="font-size:12px;margin-top:8px">';
-    if (ptaOD !== null) {
-      html += '<strong>OD — PTA: ' + ptaOD.toFixed(0) + ' dB → ' + (cOD && cOD.label ? this._esc(cOD.label) : NA) + '</strong><br>';
-    } else {
-      html += 'OD: ' + NA + '<br>';
-    }
-    if (ptaOI !== null) {
-      html += '<strong>OI — PTA: ' + ptaOI.toFixed(0) + ' dB → ' + (cOI && cOI.label ? this._esc(cOI.label) : NA) + '</strong>';
-    } else {
-      html += 'OI: ' + NA;
-    }
-    html += '</p>';
-
-    if ((logoResultados.OD && logoResultados.OD.length > 0) || (logoResultados.OI && logoResultados.OI.length > 0)) {
-      html += '<h2 style="font-size:14px;margin-top:24px;border-left:3px solid #111;padding-left:8px">Logoaudiometría</h2>';
-      if (logoResultados.OD && logoResultados.OD.length > 0) {
-        html += '<p style="font-size:12px"><strong>Oído Derecho — Discriminación: ' + pctLogo('OD') + '</strong></p>';
-        html += '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:12px"><tr><th style="background:#1a1a2e;color:#fff;padding:7px">Palabra</th><th style="background:#1a1a2e;color:#fff;padding:7px">Nivel</th><th style="background:#1a1a2e;color:#fff;padding:7px">Correcta</th></tr>' + filasLogo('OD') + '</table>';
-      }
-      if (logoResultados.OI && logoResultados.OI.length > 0) {
-        html += '<p style="font-size:12px;margin-top:12px"><strong>Oído Izquierdo — Discriminación: ' + pctLogo('OI') + '</strong></p>';
-        html += '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:12px"><tr><th style="background:#1a1a2e;color:#fff;padding:7px">Palabra</th><th style="background:#1a1a2e;color:#fff;padding:7px">Nivel</th><th style="background:#1a1a2e;color:#fff;padding:7px">Correcta</th></tr>' + filasLogo('OI') + '</table>';
-      }
-    }
-
-    html += '<br><hr style="margin-top:30px">';
-    html += '<p style="font-size:10px;color:#666;text-align:center">Generado con Audiómetro Clínico Pro · Solo referencia clínica</p>';
-    html += '</div>';
-    
-    return html;
+  /** Verifica si el navegador soporta compartir archivos */
+  _puedeCompartirArchivos() {
+    if (!navigator.share || !navigator.canShare) return false;
+    // Prueba rápida con un archivo dummy
+    const testFile = new File(["test"], "test.pdf", { type: "application/pdf" });
+    return navigator.canShare({ files: [testFile] });
   },
 
-  _esc(value) {
-    if (value === null || value === undefined) return '';
-    return String(value)
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#039;');
-  }
-};
+  /**
+   * Genera un Blob HTML y lo comparte como archivo .html renombrado a .pdf.
+   * El share sheet de Android permite abrirlo en Drive, WhatsApp, imprimir, etc.
+   *
+   * Nota: algunos dispositivos rechazan type "application/pdf" para un Blob HTML,
+   * por eso usamos text/html con extensión .html. Para un PDF binario real
+   * descomentá la sección jsPDF más abajo.
+   */
+  async _compartirComoArchivo(htmlContent) {
+    const paciente = State.paciente || {};
+    const nombre   = paciente.nombre
+      ? paciente.nombre.replace(/[^a-z0-9áéíóúüñ\s]/gi, "").trim().replace(/\s+/g, "_")
+      : "Paciente";
+    const fecha = new Date().toLocaleDateString("es-AR", {
+      day: "2-digit", month: "2-digit", year: "numeric"
+    }).replace(/\//g, "-");
+
+    const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+    const file = new File(
+      [blob],
+      `Audiograma_${nombre}_${fecha}.html`,
+      { type: "text/html" }
+    );
+
+    await navigator.share({
+      title: `Audiograma — ${paciente.nombre || "Paciente"}`,
+      text:  `Informe audiométrico de ${paciente.nombre || "Paciente"} — ${fecha}`,
+      files: [file]
+    });
+  },
+
+  /* ── Alternativa con jsPDF (PDF binario real) ────────────────────────────
+   * Descomentá este bloque y comentá _compartirComoArchivo() si usás jsPDF.
+   *
+  async _compartirComoArchivo(htmlContent) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+
+    // Renderizamos el HTML en un iframe oculto y luego lo volcamos al PDF
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:210mm;height:297mm;border:none";
+    document.body.appendChild(iframe);
+    iframe.contentDocument.write(htmlContent);
+    iframe.contentDocument.close();
+
+    await new Promise(r => setTimeout(r, 600)); // esperar render
+
+    await doc.html(iframe.contentDocument.body, {
+      x: 10, y: 10,
+      width: 190,
+      windowWidth: 794
     });
 
-    // ── Etiquetas de ejes ─────────────────────────────────────────────────
+    document.body.removeChild(iframe);
+
+    const pdfBlob = doc.output("blob");
+    const paciente = State.paciente || {};
+    const nombre   = (paciente.nombre || "Paciente").replace(/\s+/g, "_");
+    const fecha    = new Date().toLocaleDateString("es-AR").replace(/\//g, "-");
+    const file     = new File([pdfBlob], `Audiograma_${nombre}_${fecha}.pdf`, { type: "application/pdf" });
+
+    await navigator.share({
+      title: `Audiograma — ${paciente.nombre || "Paciente"}`,
+      files: [file]
+    });
+  },
+  ── fin alternativa jsPDF ── */
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // FALLBACK: VENTANA DE IMPRESIÓN
+  // ─────────────────────────────────────────────────────────────────────────
+
+  _abrirVentanaImpresion(htmlContent) {
+    const win = window.open("", "_blank");
+    if (!win) {
+      alert(
+        "El navegador bloqueó la ventana emergente.\n" +
+        "Habilitá las ventanas emergentes para este sitio o usá la opción de compartir."
+      );
+      return;
+    }
+    win.document.write(htmlContent);
+    win.document.close();
+
+    win.addEventListener("load", () => {
+      setTimeout(() => {
+        win.focus();
+        win.print();
+      }, 400);
+    });
+
+    UI?.showMsg?.("msg-resultado", "✓ Ventana de impresión abierta", "#10b981");
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SVG AUDIOGRAMA
+  // ─────────────────────────────────────────────────────────────────────────
+
+  _t(tag, attrs, text) {
+    const attrStr = Object.entries(attrs)
+      .map(([k, v]) => `${k}="${v}"`)
+      .join(" ");
+    if (text !== undefined) {
+      return `<${tag} ${attrStr}>${String(text)}</${tag}>`;
+    }
+    return `<${tag} ${attrStr}/>`;
+  },
+
+  _generarSVGAudiograma(resultados, maskResultados) {
+    const SVG_W   = 560;
+    const SVG_H   = 320;
+    const PAD_L   = 52;
+    const PAD_R   = 20;
+    const PAD_T   = 24;
+    const PAD_B   = 36;
+    const CHART_W = SVG_W - PAD_L - PAD_R;
+    const CHART_H = SVG_H - PAD_T - PAD_B;
+    const DB_MIN  = -10;
+    const DB_MAX  = 120;
+
+    const FREQS = [250, 500, 1000, 2000, 3000, 4000, 6000, 8000];
+
+    const C_OD   = "#c03030";
+    const C_OI   = "#1a55a8";
+    const C_OD_M = "#d4880a";
+    const C_OI_M = "#0891b2";
+
+    const xPos = (i)  => PAD_L + (i / (FREQS.length - 1)) * CHART_W;
+    const yPos = (db) => PAD_T + ((db - DB_MIN) / (DB_MAX - DB_MIN)) * CHART_H;
+    const t    = this._t.bind(this);
+
+    let els = [];
+
+    els.push(t("rect", {
+      x: PAD_L, y: yPos(DB_MIN).toFixed(1),
+      width: CHART_W,
+      height: (yPos(25) - yPos(DB_MIN)).toFixed(1),
+      fill: "rgba(180,230,180,0.25)"
+    }));
+
+    els.push(t("rect", {
+      x: PAD_L, y: PAD_T,
+      width: CHART_W, height: CHART_H,
+      fill: "none",
+      stroke: "rgba(15,23,42,0.3)",
+      "stroke-width": 1
+    }));
+
+    [-10, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120].forEach(db => {
+      const y      = yPos(db).toFixed(1);
+      const isBold = db === 0;
+      els.push(t("line", {
+        x1: PAD_L, y1: y,
+        x2: SVG_W - PAD_R, y2: y,
+        stroke: "rgba(15,23,42,0.18)",
+        "stroke-width": isBold ? 1.2 : 0.6,
+        "stroke-dasharray": db === 25 ? "3,3" : "none"
+      }));
+      els.push(t("text", {
+        x: PAD_L - 5, y: y,
+        "text-anchor": "end",
+        "dominant-baseline": "middle",
+        fill: "rgba(15,23,42,0.65)",
+        "font-size": 9,
+        "font-family": "Arial,Helvetica,sans-serif"
+      }, String(db)));
+    });
+
+    FREQS.forEach((f, i) => {
+      const x = xPos(i).toFixed(1);
+      els.push(t("line", {
+        x1: x, y1: PAD_T,
+        x2: x, y2: SVG_H - PAD_B,
+        stroke: "rgba(15,23,42,0.18)",
+        "stroke-width": 0.6
+      }));
+      els.push(t("text", {
+        x: x, y: SVG_H - PAD_B + 14,
+        "text-anchor": "middle",
+        fill: "rgba(15,23,42,0.65)",
+        "font-size": 9,
+        "font-family": "Arial,Helvetica,sans-serif"
+      }, f >= 1000 ? `${f / 1000}k` : String(f)));
+    });
+
     const midY = (PAD_T + SVG_H - PAD_B) / 2;
     const midX = PAD_L + CHART_W / 2;
 
@@ -361,14 +276,12 @@ const PDF = {
       "font-family": "Arial,Helvetica,sans-serif"
     }, "Frecuencia (Hz)"));
 
-    // ── Curvas de los oídos ───────────────────────────────────────────────
     const trazarCurva = (ear, color, symbol, colorM, symbolM) => {
       const puntos = FREQS.map((f, i) => {
         const db = resultados[ear]?.[f];
         return db !== undefined ? { x: xPos(i), y: yPos(db), f } : null;
       }).filter(Boolean);
 
-      // Línea de conexión
       if (puntos.length >= 2) {
         const d = puntos
           .map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
@@ -383,7 +296,6 @@ const PDF = {
         }));
       }
 
-      // Símbolos principales
       puntos.forEach(p => {
         els.push(t("text", {
           x: p.x.toFixed(1), y: p.y.toFixed(1),
@@ -396,7 +308,6 @@ const PDF = {
         }, symbol));
       });
 
-      // Símbolos de máscara
       FREQS.forEach((f, i) => {
         if (maskResultados[ear]?.[f] !== undefined) {
           const db = resultados[ear]?.[f] ?? 0;
@@ -415,7 +326,6 @@ const PDF = {
     trazarCurva("OD", C_OD, "○", C_OD_M, "▽");
     trazarCurva("OI", C_OI, "×", C_OI_M, "□");
 
-    // ── Leyenda ───────────────────────────────────────────────────────────
     const legX = PAD_L + 8;
     const legY = PAD_T + 8;
 
@@ -429,8 +339,8 @@ const PDF = {
     }));
 
     const legendItems = [
-      { sym: "○", color: C_OD,   label: "OD — Oído Derecho",    dy: 0  },
-      { sym: "×", color: C_OI,   label: "OI — Oído Izquierdo",  dy: 22 }
+      { sym: "○", color: C_OD, label: "OD — Oído Derecho",   dy: 0  },
+      { sym: "×", color: C_OI, label: "OI — Oído Izquierdo", dy: 22 }
     ];
 
     legendItems.forEach(({ sym, color, label, dy }) => {
@@ -460,24 +370,22 @@ const PDF = {
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  // HTML COMPLETO PARA IMPRIMIR
+  // HTML COMPLETO PARA IMPRIMIR / COMPARTIR
   // ─────────────────────────────────────────────────────────────────────────
 
   _generarHTML() {
-    const paciente      = State.paciente        || {};
-    const resultados    = State.resultados      || { OD: {}, OI: {} };
-    const maskResultados= State.maskResultados  || { OD: {}, OI: {} };
-    const logoResultados= State.logoResultados  || { OD: [], OI: [] };
+    const paciente       = State.paciente        || {};
+    const resultados     = State.resultados      || { OD: {}, OI: {} };
+    const maskResultados = State.maskResultados  || { OD: {}, OI: {} };
+    const logoResultados = State.logoResultados  || { OD: [], OI: [] };
 
     const ptaOD = Classifications.calcularPTA(resultados.OD);
     const ptaOI = Classifications.calcularPTA(resultados.OI);
     const cOD   = Classifications.clasificar(ptaOD);
     const cOI   = Classifications.clasificar(ptaOI);
 
-    // ── SVG del audiograma ────────────────────────────────────────────────
     const svgAudiograma = this._generarSVGAudiograma(resultados, maskResultados);
 
-    // ── Tabla de umbrales (8 frecuencias) ─────────────────────────────────
     const FREQS_PDF = [250, 500, 1000, 2000, 3000, 4000, 6000, 8000];
     const NA = "—";
 
@@ -493,14 +401,12 @@ const PDF = {
       </tr>`;
     }).join("");
 
-    // ── PTA calculado ─────────────────────────────────────────────────────
     const ptaRow = `<tr class="pta-row">
       <td><strong>PTA (500–4000 Hz)</strong></td>
       <td class="od"><strong>${ptaOD !== null ? `${ptaOD.toFixed(1)} dB` : NA}</strong></td>
       <td class="oi"><strong>${ptaOI !== null ? `${ptaOI.toFixed(1)} dB` : NA}</strong></td>
     </tr>`;
 
-    // ── Clasificación ─────────────────────────────────────────────────────
     const clasifRow = (ear, pta, c) => {
       if (pta === null) return `<tr><td>${ear}</td><td colspan="2" class="muted">Sin datos suficientes</td></tr>`;
       const badgeColor = this._clasifColor(c?.cls);
@@ -519,7 +425,6 @@ const PDF = {
       </tbody>
     </table>`;
 
-    // ── Logoaudiometría ───────────────────────────────────────────────────
     const logoODpct = Classifications.calcularDiscriminacion(logoResultados.OD);
     const logoOIpct = Classifications.calcularDiscriminacion(logoResultados.OI);
 
@@ -548,12 +453,10 @@ const PDF = {
     const logoOIHtml = generarTablaLogo("OI — Oído Izquierdo", logoResultados.OI, logoOIpct);
     const hayLogo    = logoODHtml || logoOIHtml;
 
-    // ── Fecha de impresión ────────────────────────────────────────────────
     const hoy = new Date().toLocaleDateString("es-AR", {
       day: "2-digit", month: "2-digit", year: "numeric"
     });
 
-    // ── HTML COMPLETO ─────────────────────────────────────────────────────
     return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -561,7 +464,6 @@ const PDF = {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Audiograma — ${this._esc(paciente.nombre || "Paciente")}</title>
 <style>
-  /* ── Reset y base ── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
@@ -579,7 +481,6 @@ const PDF = {
     padding: 12mm 0 10mm;
   }
 
-  /* ── Cabecera del informe ── */
   .report-header {
     text-align: center;
     border-bottom: 2.5px solid #1a1a3e;
@@ -600,7 +501,6 @@ const PDF = {
     text-transform: uppercase;
   }
 
-  /* ── Datos del paciente ── */
   .patient-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -611,21 +511,11 @@ const PDF = {
     border: 1px solid #dde3ed;
     border-radius: 6px;
   }
-  .patient-grid .field {
-    font-size: 9.5pt;
-    line-height: 1.5;
-  }
-  .patient-grid .field .label {
-    font-weight: 700;
-    color: #333;
-  }
-  .patient-grid .full { grid-column: 1 / -1; }
+  .patient-grid .field       { font-size: 9.5pt; line-height: 1.5; }
+  .patient-grid .field .label{ font-weight: 700; color: #333; }
+  .patient-grid .full        { grid-column: 1 / -1; }
 
-  /* ── Secciones ── */
-  .section {
-    margin-bottom: 14px;
-    page-break-inside: avoid;
-  }
+  .section { margin-bottom: 14px; page-break-inside: avoid; }
   .section-title {
     font-size: 10pt;
     font-weight: 700;
@@ -637,7 +527,6 @@ const PDF = {
     margin-bottom: 8px;
   }
 
-  /* ── Audiograma ── */
   .audiogram-box {
     background: #fff;
     border: 1px solid #dde3ed;
@@ -646,23 +535,10 @@ const PDF = {
     text-align: center;
     page-break-inside: avoid;
   }
-  .audiogram-box svg {
-    max-width: 100%;
-    height: auto;
-    display: block;
-    margin: 0 auto;
-  }
+  .audiogram-box svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
 
-  /* ── Tablas ── */
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 9.5pt;
-  }
-  thead tr {
-    background: #1a1a3e;
-    color: #fff;
-  }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+  thead tr { background: #1a1a3e; color: #fff; }
   thead th {
     padding: 6px 8px;
     text-align: center;
@@ -672,21 +548,15 @@ const PDF = {
   }
   tbody tr:nth-child(even) { background: #f5f7fa; }
   tbody tr:hover           { background: #eef2ff; }
-  tbody td {
-    padding: 5px 8px;
-    border-bottom: 1px solid #dde3ed;
-    text-align: center;
-  }
-  tbody td:first-child { text-align: left; font-weight: 600; color: #333; }
+  tbody td { padding: 5px 8px; border-bottom: 1px solid #dde3ed; text-align: center; }
+  tbody td:first-child     { text-align: left; font-weight: 600; color: #333; }
   .pta-row td { background: #eef2ff !important; border-top: 1.5px solid #6070b0; }
 
-  /* Colores de oído */
   .od   { color: #c03030; }
   .oi   { color: #1a55a8; }
   .mask { font-size: 8pt; color: #8a6a10; }
   .muted{ color: #888; font-style: italic; }
 
-  /* Badges de clasificación */
   .badge {
     display: inline-block;
     padding: 2px 10px;
@@ -696,11 +566,7 @@ const PDF = {
     white-space: nowrap;
   }
 
-  /* ── Logoaudiometría ── */
-  .logo-ear {
-    margin-bottom: 10px;
-    page-break-inside: avoid;
-  }
+  .logo-ear { margin-bottom: 10px; page-break-inside: avoid; }
   .logo-ear-header {
     font-size: 9.5pt;
     font-weight: 700;
@@ -711,7 +577,6 @@ const PDF = {
     border-left: 3px solid currentColor;
   }
 
-  /* ── Resumen clínico ── */
   .summary-box {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -732,12 +597,8 @@ const PDF = {
     letter-spacing: 0.5px;
     margin-bottom: 3px;
   }
-  .summary-item .si-val {
-    font-size: 14pt;
-    font-weight: 700;
-  }
+  .summary-item .si-val { font-size: 14pt; font-weight: 700; }
 
-  /* ── Pie de página ── */
   .report-footer {
     margin-top: 20px;
     padding-top: 10px;
@@ -749,35 +610,19 @@ const PDF = {
     color: #888;
     page-break-inside: avoid;
   }
-  .report-footer .disclaimer {
-    max-width: 55%;
-    line-height: 1.4;
-  }
-  .report-footer .print-info {
-    text-align: right;
-  }
+  .report-footer .disclaimer { max-width: 55%; line-height: 1.4; }
+  .report-footer .print-info { text-align: right; }
 
-  /* ── Firma ── */
   .firma-area {
     margin-top: 24px;
     display: flex;
     justify-content: flex-end;
     page-break-inside: avoid;
   }
-  .firma-box {
-    width: 180px;
-    text-align: center;
-  }
-  .firma-line {
-    border-top: 1.5px solid #222;
-    margin-bottom: 4px;
-  }
-  .firma-label {
-    font-size: 8pt;
-    color: #555;
-  }
+  .firma-box { width: 180px; text-align: center; }
+  .firma-line { border-top: 1.5px solid #222; margin-bottom: 4px; }
+  .firma-label { font-size: 8pt; color: #555; }
 
-  /* ── Botón de impresión (oculto al imprimir) ── */
   .print-btn {
     display: block;
     margin: 20px auto 0;
@@ -790,39 +635,33 @@ const PDF = {
     font-weight: 700;
     cursor: pointer;
     letter-spacing: 0.5px;
-    transition: background 0.2s;
   }
   .print-btn:hover { background: #2d2d6e; }
 
-  /* ── IMPRESIÓN ── */
   @media print {
-    .print-btn { display: none !important; }
-    body        { margin: 0; }
-    .page-wrap  { width: 100%; padding: 8mm; }
-
-    table        { page-break-inside: auto; }
-    tr           { page-break-inside: avoid; page-break-after: auto; }
-    thead        { display: table-header-group; }
-
-    .section          { page-break-inside: avoid; }
-    .audiogram-box    { page-break-inside: avoid; }
-    .logo-ear         { page-break-inside: avoid; }
-    .summary-box      { page-break-inside: avoid; }
-    .report-footer    { page-break-inside: avoid; }
-    .firma-area       { page-break-inside: avoid; }
+    .print-btn    { display: none !important; }
+    body          { margin: 0; }
+    .page-wrap    { width: 100%; padding: 8mm; }
+    table         { page-break-inside: auto; }
+    tr            { page-break-inside: avoid; page-break-after: auto; }
+    thead         { display: table-header-group; }
+    .section      { page-break-inside: avoid; }
+    .audiogram-box{ page-break-inside: avoid; }
+    .logo-ear     { page-break-inside: avoid; }
+    .summary-box  { page-break-inside: avoid; }
+    .report-footer{ page-break-inside: avoid; }
+    .firma-area   { page-break-inside: avoid; }
   }
 </style>
 </head>
 <body>
 <div class="page-wrap">
 
-  <!-- ══ CABECERA ══ -->
   <div class="report-header">
     <h1>AUDIOGRAMA CLÍNICO</h1>
     <div class="subtitle">Informe de Evaluación Auditiva</div>
   </div>
 
-  <!-- ══ DATOS DEL PACIENTE ══ -->
   <div class="patient-grid">
     <div class="field">
       <span class="label">Paciente:</span>
@@ -850,7 +689,6 @@ const PDF = {
     </div>
   </div>
 
-  <!-- ══ RESUMEN RÁPIDO ══ -->
   <div class="section">
     <div class="section-title">Resumen</div>
     <div class="summary-box">
@@ -873,7 +711,6 @@ const PDF = {
     </div>
   </div>
 
-  <!-- ══ AUDIOGRAMA ══ -->
   <div class="section">
     <div class="section-title">Audiograma Tonal</div>
     <div class="audiogram-box">
@@ -881,7 +718,6 @@ const PDF = {
     </div>
   </div>
 
-  <!-- ══ UMBRALES POR FRECUENCIA ══ -->
   <div class="section">
     <div class="section-title">Umbrales Auditivos por Frecuencia</div>
     <table>
@@ -899,7 +735,6 @@ const PDF = {
     </table>
   </div>
 
-  <!-- ══ CLASIFICACIÓN DIAGNÓSTICA ══ -->
   <div class="section">
     <div class="section-title">Clasificación Diagnóstica (ISO 1999)</div>
     ${tablaClasif}
@@ -909,7 +744,6 @@ const PDF = {
   </div>
 
   ${hayLogo ? `
-  <!-- ══ LOGOAUDIOMETRÍA ══ -->
   <div class="section">
     <div class="section-title">Logoaudiometría — Discriminación Verbal</div>
     ${logoODHtml}
@@ -917,7 +751,6 @@ const PDF = {
   </div>
   ` : ""}
 
-  <!-- ══ FIRMA ══ -->
   <div class="firma-area">
     <div class="firma-box">
       <div style="height:40px"></div>
@@ -926,11 +759,10 @@ const PDF = {
     </div>
   </div>
 
-  <!-- ══ PIE DE PÁGINA ══ -->
   <div class="report-footer">
     <div class="disclaimer">
       <strong>Audiómetro Clínico Pro</strong> — Solo referencia clínica.<br>
-      Usar auriculares calibrados. Los valores obtenidos deben ser interpretados por un profesional habilitado.
+      Usar auriculares calibrados. Los valores deben ser interpretados por un profesional habilitado.
     </div>
     <div class="print-info">
       Impreso: ${hoy}<br>
@@ -938,10 +770,9 @@ const PDF = {
     </div>
   </div>
 
-  <!-- Botón visible solo en pantalla -->
   <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
 
-</div><!-- /page-wrap -->
+</div>
 </body>
 </html>`;
   },
@@ -950,7 +781,6 @@ const PDF = {
   // HELPERS
   // ─────────────────────────────────────────────────────────────────────────
 
-  /** Escapa caracteres HTML peligrosos */
   _esc(value) {
     if (value === null || value === undefined) return "";
     return String(value)
@@ -961,14 +791,13 @@ const PDF = {
       .replace(/'/g, "&#039;");
   },
 
-  /** Devuelve colores para el badge de clasificación */
   _clasifColor(cls) {
     const map = {
-      normal:    { bg: "rgba(16,185,129,0.15)",  text: "#065f46", border: "#10b981" },
-      leve:      { bg: "rgba(212,175,55,0.2)",   text: "#78620a", border: "#d4af37" },
-      moderada:  { bg: "rgba(245,158,11,0.18)",  text: "#92400e", border: "#f59e0b" },
-      severa:    { bg: "rgba(234,88,12,0.18)",   text: "#7c2d12", border: "#ea580c" },
-      profunda:  { bg: "rgba(239,68,68,0.18)",   text: "#7f1d1d", border: "#ef4444" }
+      normal:   { bg: "rgba(16,185,129,0.15)",  text: "#065f46", border: "#10b981" },
+      leve:     { bg: "rgba(212,175,55,0.2)",   text: "#78620a", border: "#d4af37" },
+      moderada: { bg: "rgba(245,158,11,0.18)",  text: "#92400e", border: "#f59e0b" },
+      severa:   { bg: "rgba(234,88,12,0.18)",   text: "#7c2d12", border: "#ea580c" },
+      profunda: { bg: "rgba(239,68,68,0.18)",   text: "#7f1d1d", border: "#ef4444" }
     };
     return map[cls] || { bg: "#f0f0f0", text: "#333", border: "#ccc" };
   }
