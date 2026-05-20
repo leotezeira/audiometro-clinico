@@ -19,9 +19,7 @@ descargar() {
 
   try {
 
-    // ─────────────────────────────────────────────
-    // Eliminar iframe anterior si existe
-    // ─────────────────────────────────────────────
+    // eliminar iframe anterior
     const oldFrame =
       document.getElementById("pdf-print-frame");
 
@@ -29,9 +27,7 @@ descargar() {
       oldFrame.remove();
     }
 
-    // ─────────────────────────────────────────────
-    // Crear iframe oculto
-    // ─────────────────────────────────────────────
+    // crear iframe oculto
     const iframe =
       document.createElement("iframe");
 
@@ -48,24 +44,16 @@ descargar() {
 
     iframe.style.opacity = "0";
 
-    // IMPORTANTE para Android
-    iframe.setAttribute("sandbox",
-      "allow-modals allow-same-origin");
-
     document.body.appendChild(iframe);
 
-    // ─────────────────────────────────────────────
-    // Obtener documento interno
-    // ─────────────────────────────────────────────
+    // referencia
     const iframeWindow =
       iframe.contentWindow;
 
     const iframeDoc =
       iframeWindow.document;
 
-    // ─────────────────────────────────────────────
-    // Escribir HTML completo
-    // ─────────────────────────────────────────────
+    // escribir HTML
     iframeDoc.open();
 
     iframeDoc.write(
@@ -74,19 +62,15 @@ descargar() {
 
     iframeDoc.close();
 
-    // ─────────────────────────────────────────────
-    // Esperar carga completa
-    // ─────────────────────────────────────────────
+    // esperar carga
     iframe.onload = () => {
 
-      // tiempo extra para Android
       setTimeout(() => {
 
         try {
 
           iframeWindow.focus();
 
-          // abrir diálogo imprimir/PDF
           iframeWindow.print();
 
           UI?.showMsg?.(
