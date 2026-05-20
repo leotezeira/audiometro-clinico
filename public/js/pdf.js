@@ -1,11 +1,62 @@
 /**
  * PDF.JS
- * Exportación simple a PDF/impresión (vía window.print)
+ * Generación de PDF real con html2pdf + funciones de descarga y correo
  */
 
 const PDF = {
-  exportar() {
+  /**
+   * Genera y descarga el PDF
+   */
+  descargar() {
     const paciente = State.paciente || {};
+    const html = this._generarHTML(paciente);
+    
+    const opt = {
+      margin: 10,
+      filename: `Audiograma_${paciente.nombre || 'Paciente'}_${new Date().toISOString().split('T')[0]}.pdf`,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2 },
+      jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
+    };
+    
+    html2pdf().set(opt).from(html).save();
+    UI.showMsg("msg-resultado", "✓ PDF descargado", "#10b981");
+  },
+
+  /**
+   * Genera contenido en base64 para enviar por correo
+   */
+  enviarPorCorreo() {
+    const paciente = State.paciente || {};
+    if (!paciente.nombre) {
+      UI.showMsg("msg-resultado", "⚠ Completa los datos del paciente primero", "#f59e0b");
+      return;
+    }
+
+    // Primero descarga el PDF
+    this.descargar();
+
+    // Luego abre el cliente de correo
+    const subject = `Audiograma - ${paciente.nombre}`;
+    const body = `Adjunto encontrará el audiograma clínico de ${paciente.nombre}.\n\nFecha: ${paciente.fecha || new Date().toLocaleDateString('es-AR')}\nH.C.: ${paciente.hc || 'N/A'}`;
+    const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    
+    setTimeout(() => {
+      window.location.href = mailtoLink;
+    }, 1000);
+  },
+
+  /**
+   * Exporta PDF (acción clásica)
+   */
+  exportar() {
+    this.descargar();
+  },
+
+  /**
+   * Genera HTML del audiograma
+   */
+  _generarHTML(paciente) {
     const resultados = State.resultados || { OD: {}, OI: {} };
     const maskResultados = State.maskResultados || { OD: {}, OI: {} };
     const logoResultados = State.logoResultados || { OD: [], OI: [] };
@@ -34,16 +85,10 @@ const PDF = {
       return pct === null ? NA : `${pct}%`;
     };
 
-    const win = window.open("", "_blank");
-    if (!win) {
-      alert("No se pudo abrir la ventana de impresión. Revisa el bloqueador de pop-ups.");
-      return;
-    }
-
-    win.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8" />
+    return `<!doctype html><html lang="es"><head><meta charset="utf-8" />
       <title>Audiograma — ${this._esc(paciente.nombre || "Paciente")}</title>
       <style>
-        body{font-family:Georgia,serif;margin:40px;color:#111}
+        body{font-family:Georgia,serif;margin:0;padding:20px;color:#111}
         h1{text-align:center;font-size:20px;letter-spacing:2px;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:4px}
         h2{font-size:14px;margin-top:24px;border-left:3px solid #111;padding-left:8px}
         table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}
@@ -52,7 +97,6 @@ const PDF = {
         .info{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0;font-size:12px}
         .info div{padding:6px 10px;background:#f5f5f5;border-radius:4px}
         .muted{color:#555}
-        @media print{button{display:none}}
       </style>
     </head><body>
       <h1>AUDIOGRAMA CLÍNICO</h1>
@@ -82,14 +126,7 @@ const PDF = {
 
       <br><hr style="margin-top:30px">
       <p style="font-size:10px;color:#666;text-align:center">Generado con Audiómetro Clínico Pro · Solo referencia clínica</p>
-      <br>
-      <button onclick="window.print()" style="padding:10px 24px;background:#1a1a2e;color:#fff;border:none;border-radius:4px;font-size:13px;cursor:pointer">
-        Imprimir / Guardar PDF
-      </button>
-    </body></html>`);
-
-    win.document.close();
-    win.focus();
+    </body></html>`;
   },
 
   _esc(value) {
@@ -99,6 +136,6 @@ const PDF = {
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#39;");
+      .replaceAll("'", "&#039;");
   }
 };

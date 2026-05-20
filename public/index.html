@@ -11,6 +11,7 @@
   <link rel="icon" href="/logoappclinica.png" type="image/png">
   <title>Audiómetro Clínico Pro</title>
   <link rel="stylesheet" href="css/styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
@@ -61,6 +62,9 @@
   </symbol>
   <symbol id="i-headphones" viewBox="0 0 24 24">
     <path fill="currentColor" d="M12 3a9 9 0 0 0-9 9v6a3 3 0 0 0 3 3h2v-8H6v6H6a1 1 0 0 1-1-1v-6a7 7 0 0 1 14 0v6a1 1 0 0 1-1 1h-2v-6h-2v8h4a3 3 0 0 0 3-3v-6a9 9 0 0 0-9-9Z"/>
+  </symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24">
+    <path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2m0 2v10l4-3 4 3 4-3 4 3V6m0 0l-8 6-8-6"/>
   </symbol>
 </svg>
 
@@ -282,7 +286,8 @@
 
   <div class="btn-row">
     <button class="btn btn-success" onclick="Storage.guardarSesion()"><svg class="icon" aria-hidden="true"><use href="#i-save"></use></svg> Guardar Sesión</button>
-    <button class="btn btn-primary" onclick="PDF.exportar()"><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg> Exportar PDF</button>
+    <button class="btn btn-primary" onclick="PDF.descargar()"><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg> Descargar PDF</button>
+    <button class="btn btn-primary" onclick="PDF.enviarPorCorreo()"><svg class="icon" aria-hidden="true"><use href="#i-mail"></use></svg> Enviar por Correo</button>
   </div>
   <div class="mensaje" id="msg-resultado"></div>
 </div>
