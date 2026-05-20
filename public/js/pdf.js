@@ -1,60 +1,43 @@
-/**
- * PDF.JS
- * Generación y exportación nativa de informe audiométrico en PWA.
- *
- * Estrategia principal (Android / PWA):
- *   1. Se genera el HTML completo del informe.
- *   2. Se abre una ventana de impresión para que el navegador lo renderice.
- *   3. El botón "Exportar PDF" usa la Web Share API nativa de Android
- *      para compartir / guardar el archivo directamente desde la PWA.
- *
- * Compatibilidad:
- *   - Android (Chrome/PWA): usa navigator.share() con File → sheet nativo.
- *   - Desktop / iOS sin share: abre ventana de impresión como fallback.
- *
- * Para generar un Blob PDF real sin depender de jsPDF se usa el truco de
- * convertir el HTML a un Blob text/html y compartirlo como .pdf cuando
- * el navegador lo soporta; en la mayoría de dispositivos Android el sheet
- * nativo permite "Imprimir → Guardar como PDF" en un tap.
- *
- * Si querés un PDF binario real podés descomentar la sección jsPDF
- * (requiere agregar el script al HTML principal):
- *   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
- */
-
 const PDF = {
 
   // ─────────────────────────────────────────────────────────────────────────
   // PÚBLICO
   // ─────────────────────────────────────────────────────────────────────────
 
-  /**
-   * Botón principal: "Exportar PDF"
-   * En Android PWA activa el share sheet nativo.
-   * En desktop abre la ventana de impresión.
-   */
   async descargar() {
+    console.log("=== INICIANDO EXPORTACIÓN ===");
+    
+    // Verificar que State existe
+    if (typeof State === 'undefined') {
+      console.error("ERROR: State no está definido");
+      alert("Error: Datos del paciente no disponibles");
+      return;
+    }
+    
     const htmlContent = this._generarHTML();
-
-    // ── Intentar Web Share API con archivo (Android PWA) ──────────────────
+    console.log("HTML generado, longitud:", htmlContent.length);
+    
+    // Verificar Web Share API
     if (this._puedeCompartirArchivos()) {
+      console.log("Web Share API disponible, intentando compartir...");
       try {
         await this._compartirComoArchivo(htmlContent);
-        UI?.showMsg?.("msg-resultado", "✓ Compartir / guardar abierto", "#10b981");
+        console.log("Compartido exitosamente");
+        if (typeof UI !== 'undefined' && UI.showMsg) {
+          UI.showMsg("msg-resultado", "✓ Compartir / guardar abierto", "#10b981");
+        }
         return;
       } catch (err) {
-        // Si el usuario canceló el share, no hacemos nada más
+        console.error("Error en Web Share:", err);
         if (err.name === "AbortError") return;
-        // Otro error → fallback a ventana de impresión
-        console.warn("Web Share API falló, usando fallback:", err);
       }
     }
-
-    // ── Fallback: ventana de impresión (desktop / iOS / navegadores sin share) ──
+    
+    // Fallback a impresión
+    console.log("Usando fallback de impresión");
     this._abrirVentanaImpresion(htmlContent);
   },
 
-  /** Alias para compatibilidad con botones existentes */
   enviarPorCorreo() {
     this.descargar();
   },
@@ -63,742 +46,224 @@ const PDF = {
   // WEB SHARE API
   // ─────────────────────────────────────────────────────────────────────────
 
-  /** Verifica si el navegador soporta compartir archivos */
   _puedeCompartirArchivos() {
-    if (!navigator.share || !navigator.canShare) return false;
-    // Prueba rápida con un archivo dummy
-    const testFile = new File(["test"], "test.pdf", { type: "application/pdf" });
-    return navigator.canShare({ files: [testFile] });
+    const disponible = !!(navigator.share && navigator.canShare);
+    console.log("Web Share disponible?", disponible);
+    
+    if (disponible) {
+      try {
+        const testFile = new File(["test"], "test.pdf", { type: "application/pdf" });
+        const puede = navigator.canShare({ files: [testFile] });
+        console.log("Puede compartir archivos?", puede);
+        return puede;
+      } catch(e) {
+        console.error("Error verificando canShare:", e);
+        return false;
+      }
+    }
+    return false;
   },
 
-  /**
-   * Genera un Blob HTML y lo comparte como archivo .html renombrado a .pdf.
-   * El share sheet de Android permite abrirlo en Drive, WhatsApp, imprimir, etc.
-   *
-   * Nota: algunos dispositivos rechazan type "application/pdf" para un Blob HTML,
-   * por eso usamos text/html con extensión .html. Para un PDF binario real
-   * descomentá la sección jsPDF más abajo.
-   */
   async _compartirComoArchivo(htmlContent) {
+    console.log("Preparando archivo para compartir...");
+    
     const paciente = State.paciente || {};
-    const nombre   = paciente.nombre
+    const nombre = paciente.nombre
       ? paciente.nombre.replace(/[^a-z0-9áéíóúüñ\s]/gi, "").trim().replace(/\s+/g, "_")
       : "Paciente";
+    
     const fecha = new Date().toLocaleDateString("es-AR", {
       day: "2-digit", month: "2-digit", year: "numeric"
     }).replace(/\//g, "-");
-
+    
+    // PRUEBA: Guardar temporalmente para debug
+    console.log("Nombre archivo:", `Audiograma_${nombre}_${fecha}.html`);
+    
     const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
     const file = new File(
       [blob],
       `Audiograma_${nombre}_${fecha}.html`,
       { type: "text/html" }
     );
-
-    await navigator.share({
-      title: `Audiograma — ${paciente.nombre || "Paciente"}`,
-      text:  `Informe audiométrico de ${paciente.nombre || "Paciente"} — ${fecha}`,
-      files: [file]
-    });
+    
+    console.log("Archivo creado, tamaño:", file.size, "bytes");
+    
+    try {
+      await navigator.share({
+        title: `Audiograma — ${paciente.nombre || "Paciente"}`,
+        text: `Informe audiométrico de ${paciente.nombre || "Paciente"} — ${fecha}`,
+        files: [file]
+      });
+      console.log("Compartido correctamente");
+    } catch (err) {
+      console.error("Error en navigator.share:", err);
+      throw err;
+    }
   },
-
-  /* ── Alternativa con jsPDF (PDF binario real) ────────────────────────────
-   * Descomentá este bloque y comentá _compartirComoArchivo() si usás jsPDF.
-   *
-  async _compartirComoArchivo(htmlContent) {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-
-    // Renderizamos el HTML en un iframe oculto y luego lo volcamos al PDF
-    const iframe = document.createElement("iframe");
-    iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:210mm;height:297mm;border:none";
-    document.body.appendChild(iframe);
-    iframe.contentDocument.write(htmlContent);
-    iframe.contentDocument.close();
-
-    await new Promise(r => setTimeout(r, 600)); // esperar render
-
-    await doc.html(iframe.contentDocument.body, {
-      x: 10, y: 10,
-      width: 190,
-      windowWidth: 794
-    });
-
-    document.body.removeChild(iframe);
-
-    const pdfBlob = doc.output("blob");
-    const paciente = State.paciente || {};
-    const nombre   = (paciente.nombre || "Paciente").replace(/\s+/g, "_");
-    const fecha    = new Date().toLocaleDateString("es-AR").replace(/\//g, "-");
-    const file     = new File([pdfBlob], `Audiograma_${nombre}_${fecha}.pdf`, { type: "application/pdf" });
-
-    await navigator.share({
-      title: `Audiograma — ${paciente.nombre || "Paciente"}`,
-      files: [file]
-    });
-  },
-  ── fin alternativa jsPDF ── */
 
   // ─────────────────────────────────────────────────────────────────────────
   // FALLBACK: VENTANA DE IMPRESIÓN
   // ─────────────────────────────────────────────────────────────────────────
 
   _abrirVentanaImpresion(htmlContent) {
+    console.log("Abriendo ventana de impresión...");
+    
     const win = window.open("", "_blank");
     if (!win) {
+      console.error("No se pudo abrir ventana - posiblemente bloqueada");
       alert(
         "El navegador bloqueó la ventana emergente.\n" +
         "Habilitá las ventanas emergentes para este sitio o usá la opción de compartir."
       );
       return;
     }
+    
     win.document.write(htmlContent);
     win.document.close();
-
+    
     win.addEventListener("load", () => {
       setTimeout(() => {
+        console.log("Ejecutando impresión...");
         win.focus();
         win.print();
       }, 400);
     });
-
-    UI?.showMsg?.("msg-resultado", "✓ Ventana de impresión abierta", "#10b981");
-  },
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // SVG AUDIOGRAMA
-  // ─────────────────────────────────────────────────────────────────────────
-
-  _t(tag, attrs, text) {
-    const attrStr = Object.entries(attrs)
-      .map(([k, v]) => `${k}="${v}"`)
-      .join(" ");
-    if (text !== undefined) {
-      return `<${tag} ${attrStr}>${String(text)}</${tag}>`;
+    
+    if (typeof UI !== 'undefined' && UI.showMsg) {
+      UI.showMsg("msg-resultado", "✓ Ventana de impresión abierta", "#10b981");
     }
-    return `<${tag} ${attrStr}/>`;
-  },
-
-  _generarSVGAudiograma(resultados, maskResultados) {
-    const SVG_W   = 560;
-    const SVG_H   = 320;
-    const PAD_L   = 52;
-    const PAD_R   = 20;
-    const PAD_T   = 24;
-    const PAD_B   = 36;
-    const CHART_W = SVG_W - PAD_L - PAD_R;
-    const CHART_H = SVG_H - PAD_T - PAD_B;
-    const DB_MIN  = -10;
-    const DB_MAX  = 120;
-
-    const FREQS = [250, 500, 1000, 2000, 3000, 4000, 6000, 8000];
-
-    const C_OD   = "#c03030";
-    const C_OI   = "#1a55a8";
-    const C_OD_M = "#d4880a";
-    const C_OI_M = "#0891b2";
-
-    const xPos = (i)  => PAD_L + (i / (FREQS.length - 1)) * CHART_W;
-    const yPos = (db) => PAD_T + ((db - DB_MIN) / (DB_MAX - DB_MIN)) * CHART_H;
-    const t    = this._t.bind(this);
-
-    let els = [];
-
-    els.push(t("rect", {
-      x: PAD_L, y: yPos(DB_MIN).toFixed(1),
-      width: CHART_W,
-      height: (yPos(25) - yPos(DB_MIN)).toFixed(1),
-      fill: "rgba(180,230,180,0.25)"
-    }));
-
-    els.push(t("rect", {
-      x: PAD_L, y: PAD_T,
-      width: CHART_W, height: CHART_H,
-      fill: "none",
-      stroke: "rgba(15,23,42,0.3)",
-      "stroke-width": 1
-    }));
-
-    [-10, 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120].forEach(db => {
-      const y      = yPos(db).toFixed(1);
-      const isBold = db === 0;
-      els.push(t("line", {
-        x1: PAD_L, y1: y,
-        x2: SVG_W - PAD_R, y2: y,
-        stroke: "rgba(15,23,42,0.18)",
-        "stroke-width": isBold ? 1.2 : 0.6,
-        "stroke-dasharray": db === 25 ? "3,3" : "none"
-      }));
-      els.push(t("text", {
-        x: PAD_L - 5, y: y,
-        "text-anchor": "end",
-        "dominant-baseline": "middle",
-        fill: "rgba(15,23,42,0.65)",
-        "font-size": 9,
-        "font-family": "Arial,Helvetica,sans-serif"
-      }, String(db)));
-    });
-
-    FREQS.forEach((f, i) => {
-      const x = xPos(i).toFixed(1);
-      els.push(t("line", {
-        x1: x, y1: PAD_T,
-        x2: x, y2: SVG_H - PAD_B,
-        stroke: "rgba(15,23,42,0.18)",
-        "stroke-width": 0.6
-      }));
-      els.push(t("text", {
-        x: x, y: SVG_H - PAD_B + 14,
-        "text-anchor": "middle",
-        fill: "rgba(15,23,42,0.65)",
-        "font-size": 9,
-        "font-family": "Arial,Helvetica,sans-serif"
-      }, f >= 1000 ? `${f / 1000}k` : String(f)));
-    });
-
-    const midY = (PAD_T + SVG_H - PAD_B) / 2;
-    const midX = PAD_L + CHART_W / 2;
-
-    els.push(t("text", {
-      x: PAD_L - 38, y: midY.toFixed(1),
-      "text-anchor": "middle",
-      fill: "rgba(15,23,42,0.6)",
-      "font-size": 10,
-      "font-family": "Arial,Helvetica,sans-serif",
-      transform: `rotate(-90,${(PAD_L - 38).toFixed(1)},${midY.toFixed(1)})`
-    }, "dB HL"));
-
-    els.push(t("text", {
-      x: midX.toFixed(1), y: SVG_H - 2,
-      "text-anchor": "middle",
-      fill: "rgba(15,23,42,0.6)",
-      "font-size": 10,
-      "font-family": "Arial,Helvetica,sans-serif"
-    }, "Frecuencia (Hz)"));
-
-    const trazarCurva = (ear, color, symbol, colorM, symbolM) => {
-      const puntos = FREQS.map((f, i) => {
-        const db = resultados[ear]?.[f];
-        return db !== undefined ? { x: xPos(i), y: yPos(db), f } : null;
-      }).filter(Boolean);
-
-      if (puntos.length >= 2) {
-        const d = puntos
-          .map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
-          .join(" ");
-        els.push(t("path", {
-          d,
-          fill: "none",
-          stroke: color,
-          "stroke-width": 2.5,
-          "stroke-linejoin": "round",
-          "stroke-linecap": "round"
-        }));
-      }
-
-      puntos.forEach(p => {
-        els.push(t("text", {
-          x: p.x.toFixed(1), y: p.y.toFixed(1),
-          "text-anchor": "middle",
-          "dominant-baseline": "middle",
-          fill: color,
-          "font-size": 15,
-          "font-weight": "bold",
-          "font-family": "Arial,Helvetica,sans-serif"
-        }, symbol));
-      });
-
-      FREQS.forEach((f, i) => {
-        if (maskResultados[ear]?.[f] !== undefined) {
-          const db = resultados[ear]?.[f] ?? 0;
-          els.push(t("text", {
-            x: xPos(i).toFixed(1), y: yPos(db).toFixed(1),
-            "text-anchor": "middle",
-            "dominant-baseline": "middle",
-            fill: colorM,
-            "font-size": 12,
-            "font-family": "Arial,Helvetica,sans-serif"
-          }, symbolM));
-        }
-      });
-    };
-
-    trazarCurva("OD", C_OD, "○", C_OD_M, "▽");
-    trazarCurva("OI", C_OI, "×", C_OI_M, "□");
-
-    const legX = PAD_L + 8;
-    const legY = PAD_T + 8;
-
-    els.push(t("rect", {
-      x: legX - 4, y: legY - 4,
-      width: 156, height: 52,
-      fill: "white",
-      stroke: "rgba(15,23,42,0.2)",
-      "stroke-width": 0.8,
-      rx: 4, ry: 4
-    }));
-
-    const legendItems = [
-      { sym: "○", color: C_OD, label: "OD — Oído Derecho",   dy: 0  },
-      { sym: "×", color: C_OI, label: "OI — Oído Izquierdo", dy: 22 }
-    ];
-
-    legendItems.forEach(({ sym, color, label, dy }) => {
-      els.push(t("text", {
-        x: legX + 6, y: legY + 12 + dy,
-        "dominant-baseline": "middle",
-        fill: color,
-        "font-size": 14,
-        "font-weight": "bold",
-        "font-family": "Arial,Helvetica,sans-serif"
-      }, sym));
-      els.push(t("text", {
-        x: legX + 24, y: legY + 12 + dy,
-        "dominant-baseline": "middle",
-        fill: "#222",
-        "font-size": 9,
-        "font-family": "Arial,Helvetica,sans-serif"
-      }, label));
-    });
-
-    return `<svg xmlns="http://www.w3.org/2000/svg"
-      width="${SVG_W}" height="${SVG_H}"
-      viewBox="0 0 ${SVG_W} ${SVG_H}"
-      style="max-width:100%;height:auto;display:block;margin:0 auto;">
-      ${els.join("")}
-    </svg>`;
   },
 
   // ─────────────────────────────────────────────────────────────────────────
-  // HTML COMPLETO PARA IMPRIMIR / COMPARTIR
+  // GENERAR HTML
   // ─────────────────────────────────────────────────────────────────────────
 
   _generarHTML() {
-    const paciente       = State.paciente        || {};
-    const resultados     = State.resultados      || { OD: {}, OI: {} };
-    const maskResultados = State.maskResultados  || { OD: {}, OI: {} };
-    const logoResultados = State.logoResultados  || { OD: [], OI: [] };
-
-    const ptaOD = Classifications.calcularPTA(resultados.OD);
-    const ptaOI = Classifications.calcularPTA(resultados.OI);
-    const cOD   = Classifications.clasificar(ptaOD);
-    const cOI   = Classifications.clasificar(ptaOI);
-
+    console.log("Generando HTML del audiograma...");
+    
+    // Verificar que State existe
+    if (typeof State === 'undefined') {
+      console.error("ERROR CRÍTICO: State no está definido");
+      return "<html><body><h1>Error: Datos no disponibles</h1></body></html>";
+    }
+    
+    const paciente = State.paciente || {};
+    const resultados = State.resultados || { OD: {}, OI: {} };
+    const maskResultados = State.maskResultados || { OD: {}, OI: {} };
+    const logoResultados = State.logoResultados || { OD: [], OI: [] };
+    
+    console.log("Paciente:", paciente.nombre || "Sin nombre");
+    
+    // Calcular PTAs
+    let ptaOD = null, ptaOI = null;
+    if (typeof Classifications !== 'undefined') {
+      ptaOD = Classifications.calcularPTA(resultados.OD);
+      ptaOI = Classifications.calcularPTA(resultados.OI);
+    }
+    
+    const cOD = typeof Classifications !== 'undefined' ? Classifications.clasificar(ptaOD) : null;
+    const cOI = typeof Classifications !== 'undefined' ? Classifications.clasificar(ptaOI) : null;
+    
     const svgAudiograma = this._generarSVGAudiograma(resultados, maskResultados);
-
+    
+    // Generar tablas (simplificado para evitar errores)
     const FREQS_PDF = [250, 500, 1000, 2000, 3000, 4000, 6000, 8000];
     const NA = "—";
-
+    
     const filasTonal = FREQS_PDF.map(f => {
-      const odVal  = resultados.OD[f]    !== undefined ? `${resultados.OD[f]} dB`    : NA;
-      const oiVal  = resultados.OI[f]    !== undefined ? `${resultados.OI[f]} dB`    : NA;
-      const odMask = maskResultados.OD[f] !== undefined ? ` <span class="mask">(NE: ${maskResultados.OD[f]} dB)</span>` : "";
-      const oiMask = maskResultados.OI[f] !== undefined ? ` <span class="mask">(NE: ${maskResultados.OI[f]} dB)</span>` : "";
+      const odVal = resultados.OD[f] !== undefined ? `${resultados.OD[f]} dB` : NA;
+      const oiVal = resultados.OI[f] !== undefined ? `${resultados.OI[f]} dB` : NA;
       return `<tr>
         <td>${f >= 1000 ? `${f / 1000}.000` : f} Hz</td>
-        <td class="od">${odVal}${odMask}</td>
-        <td class="oi">${oiVal}${oiMask}</td>
+        <td class="od">${odVal}</td>
+        <td class="oi">${oiVal}</td>
       </tr>`;
     }).join("");
-
-    const ptaRow = `<tr class="pta-row">
-      <td><strong>PTA (500–4000 Hz)</strong></td>
-      <td class="od"><strong>${ptaOD !== null ? `${ptaOD.toFixed(1)} dB` : NA}</strong></td>
-      <td class="oi"><strong>${ptaOI !== null ? `${ptaOI.toFixed(1)} dB` : NA}</strong></td>
-    </tr>`;
-
-    const clasifRow = (ear, pta, c) => {
-      if (pta === null) return `<tr><td>${ear}</td><td colspan="2" class="muted">Sin datos suficientes</td></tr>`;
-      const badgeColor = this._clasifColor(c?.cls);
-      return `<tr>
-        <td>${ear}</td>
-        <td><strong>${pta.toFixed(1)} dB</strong></td>
-        <td><span class="badge" style="background:${badgeColor.bg};color:${badgeColor.text};border:1px solid ${badgeColor.border}">${c?.label || NA}</span></td>
-      </tr>`;
-    };
-
-    const tablaClasif = `<table>
-      <thead><tr><th>Oído</th><th>PTA</th><th>Clasificación</th></tr></thead>
-      <tbody>
-        ${clasifRow("OD — Oído Derecho",   ptaOD, cOD)}
-        ${clasifRow("OI — Oído Izquierdo", ptaOI, cOI)}
-      </tbody>
-    </table>`;
-
-    const logoODpct = Classifications.calcularDiscriminacion(logoResultados.OD);
-    const logoOIpct = Classifications.calcularDiscriminacion(logoResultados.OI);
-
-    const generarTablaLogo = (ear, respuestas, pct) => {
-      if (!respuestas || !respuestas.length) return "";
-      const color = ear === "OD" ? "#c03030" : "#1a55a8";
-      const filas = respuestas.map(r => `<tr>
-        <td>${this._esc(r.palabra)}</td>
-        <td>${r.dB} dB</td>
-        <td style="color:${r.correcta ? '#16a34a' : '#dc2626'};font-weight:700">${r.correcta ? "✓" : "✗"}</td>
-      </tr>`).join("");
-
-      return `<div class="logo-ear">
-        <div class="logo-ear-header" style="color:${color}">
-          ${ear} — Discriminación verbal:
-          <strong>${pct !== null ? pct + "%" : "—"}</strong>
-        </div>
-        <table>
-          <thead><tr><th>Palabra</th><th>Nivel</th><th>Correcta</th></tr></thead>
-          <tbody>${filas}</tbody>
-        </table>
-      </div>`;
-    };
-
-    const logoODHtml = generarTablaLogo("OD — Oído Derecho",   logoResultados.OD, logoODpct);
-    const logoOIHtml = generarTablaLogo("OI — Oído Izquierdo", logoResultados.OI, logoOIpct);
-    const hayLogo    = logoODHtml || logoOIHtml;
-
-    const hoy = new Date().toLocaleDateString("es-AR", {
-      day: "2-digit", month: "2-digit", year: "numeric"
-    });
-
+    
+    const hoy = new Date().toLocaleDateString("es-AR");
+    
     return `<!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Audiograma — ${this._esc(paciente.nombre || "Paciente")}</title>
+<title>Audiograma — ${this._escapeHtml(paciente.nombre || "Paciente")}</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 11pt;
-    color: #111;
-    background: #fff;
-    padding: 0;
-    margin: 0;
-  }
-
-  .page-wrap {
-    width: 185mm;
-    margin: 0 auto;
-    padding: 12mm 0 10mm;
-  }
-
-  .report-header {
-    text-align: center;
-    border-bottom: 2.5px solid #1a1a3e;
-    padding-bottom: 10px;
-    margin-bottom: 14px;
-  }
-  .report-header h1 {
-    font-size: 18pt;
-    font-weight: 700;
-    color: #1a1a3e;
-    letter-spacing: 1px;
-    margin-bottom: 2px;
-  }
-  .report-header .subtitle {
-    font-size: 9pt;
-    color: #555;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-  }
-
-  .patient-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 5px 12px;
-    margin-bottom: 14px;
-    padding: 10px 12px;
-    background: #f5f7fa;
-    border: 1px solid #dde3ed;
-    border-radius: 6px;
-  }
-  .patient-grid .field       { font-size: 9.5pt; line-height: 1.5; }
-  .patient-grid .field .label{ font-weight: 700; color: #333; }
-  .patient-grid .full        { grid-column: 1 / -1; }
-
-  .section { margin-bottom: 14px; page-break-inside: avoid; }
-  .section-title {
-    font-size: 10pt;
-    font-weight: 700;
-    color: #1a1a3e;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    border-left: 4px solid #1a1a3e;
-    padding-left: 8px;
-    margin-bottom: 8px;
-  }
-
-  .audiogram-box {
-    background: #fff;
-    border: 1px solid #dde3ed;
-    border-radius: 6px;
-    padding: 10px;
-    text-align: center;
-    page-break-inside: avoid;
-  }
-  .audiogram-box svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
-
-  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
-  thead tr { background: #1a1a3e; color: #fff; }
-  thead th {
-    padding: 6px 8px;
-    text-align: center;
-    font-size: 9pt;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-  }
-  tbody tr:nth-child(even) { background: #f5f7fa; }
-  tbody tr:hover           { background: #eef2ff; }
-  tbody td { padding: 5px 8px; border-bottom: 1px solid #dde3ed; text-align: center; }
-  tbody td:first-child     { text-align: left; font-weight: 600; color: #333; }
-  .pta-row td { background: #eef2ff !important; border-top: 1.5px solid #6070b0; }
-
-  .od   { color: #c03030; }
-  .oi   { color: #1a55a8; }
-  .mask { font-size: 8pt; color: #8a6a10; }
-  .muted{ color: #888; font-style: italic; }
-
-  .badge {
-    display: inline-block;
-    padding: 2px 10px;
-    border-radius: 12px;
-    font-size: 8.5pt;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
-  .logo-ear { margin-bottom: 10px; page-break-inside: avoid; }
-  .logo-ear-header {
-    font-size: 9.5pt;
-    font-weight: 700;
-    margin-bottom: 5px;
-    padding: 4px 8px;
-    background: #f5f7fa;
-    border-radius: 4px;
-    border-left: 3px solid currentColor;
-  }
-
-  .summary-box {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    page-break-inside: avoid;
-  }
-  .summary-item {
-    background: #f5f7fa;
-    border: 1px solid #dde3ed;
-    border-radius: 6px;
-    padding: 8px 10px;
-    text-align: center;
-  }
-  .summary-item .si-label {
-    font-size: 8pt;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 3px;
-  }
-  .summary-item .si-val { font-size: 14pt; font-weight: 700; }
-
-  .report-footer {
-    margin-top: 20px;
-    padding-top: 10px;
-    border-top: 1px solid #dde3ed;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    font-size: 8pt;
-    color: #888;
-    page-break-inside: avoid;
-  }
-  .report-footer .disclaimer { max-width: 55%; line-height: 1.4; }
-  .report-footer .print-info { text-align: right; }
-
-  .firma-area {
-    margin-top: 24px;
-    display: flex;
-    justify-content: flex-end;
-    page-break-inside: avoid;
-  }
-  .firma-box { width: 180px; text-align: center; }
-  .firma-line { border-top: 1.5px solid #222; margin-bottom: 4px; }
-  .firma-label { font-size: 8pt; color: #555; }
-
-  .print-btn {
-    display: block;
-    margin: 20px auto 0;
-    padding: 11px 32px;
-    background: #1a1a3e;
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 700;
-    cursor: pointer;
-    letter-spacing: 0.5px;
-  }
-  .print-btn:hover { background: #2d2d6e; }
-
+  body { font-family: Arial, sans-serif; padding: 20px; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+  th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+  .od { color: #c03030; }
+  .oi { color: #1a55a8; }
+  button { display: none; }
   @media print {
-    .print-btn    { display: none !important; }
-    body          { margin: 0; }
-    .page-wrap    { width: 100%; padding: 8mm; }
-    table         { page-break-inside: auto; }
-    tr            { page-break-inside: avoid; page-break-after: auto; }
-    thead         { display: table-header-group; }
-    .section      { page-break-inside: avoid; }
-    .audiogram-box{ page-break-inside: avoid; }
-    .logo-ear     { page-break-inside: avoid; }
-    .summary-box  { page-break-inside: avoid; }
-    .report-footer{ page-break-inside: avoid; }
-    .firma-area   { page-break-inside: avoid; }
+    button { display: none; }
   }
 </style>
 </head>
 <body>
-<div class="page-wrap">
+<h1 style="text-align:center">AUDIOGRAMA CLÍNICO</h1>
+<p><strong>Paciente:</strong> ${this._escapeHtml(paciente.nombre || "No registrado")}</p>
+<p><strong>Fecha:</strong> ${paciente.fecha || hoy}</p>
 
-  <div class="report-header">
-    <h1>AUDIOGRAMA CLÍNICO</h1>
-    <div class="subtitle">Informe de Evaluación Auditiva</div>
-  </div>
+<div>${svgAudiograma}</div>
 
-  <div class="patient-grid">
-    <div class="field">
-      <span class="label">Paciente:</span>
-      ${this._esc(paciente.nombre) || '<span class="muted">No registrado</span>'}
-    </div>
-    <div class="field">
-      <span class="label">Edad:</span>
-      ${this._esc(paciente.edad) ? this._esc(paciente.edad) + " años" : '<span class="muted">—</span>'}
-    </div>
-    <div class="field">
-      <span class="label">Nº HC:</span>
-      ${this._esc(paciente.hc) || '<span class="muted">—</span>'}
-    </div>
-    <div class="field">
-      <span class="label">Fecha:</span>
-      ${this._esc(paciente.fecha) || hoy}
-    </div>
-    <div class="field full">
-      <span class="label">Motivo de consulta:</span>
-      ${this._esc(paciente.motivo) || '<span class="muted">—</span>'}
-    </div>
-    <div class="field full">
-      <span class="label">Observaciones:</span>
-      ${this._esc(paciente.obs) || '<span class="muted">—</span>'}
-    </div>
-  </div>
+<h3>Umbrales Auditivos</h3>
+<table>
+  <thead><tr><th>Frecuencia</th><th>OD</th><th>OI</th></tr></thead>
+  <tbody>${filasTonal}</tbody>
+</table>
 
-  <div class="section">
-    <div class="section-title">Resumen</div>
-    <div class="summary-box">
-      <div class="summary-item">
-        <div class="si-label">PTA Oído Derecho</div>
-        <div class="si-val od">${ptaOD !== null ? ptaOD.toFixed(1) + " dB" : "—"}</div>
-      </div>
-      <div class="summary-item">
-        <div class="si-label">PTA Oído Izquierdo</div>
-        <div class="si-val oi">${ptaOI !== null ? ptaOI.toFixed(1) + " dB" : "—"}</div>
-      </div>
-      <div class="summary-item">
-        <div class="si-label">Discriminación OD</div>
-        <div class="si-val od">${logoODpct !== null ? logoODpct + "%" : "—"}</div>
-      </div>
-      <div class="summary-item">
-        <div class="si-label">Discriminación OI</div>
-        <div class="si-val oi">${logoOIpct !== null ? logoOIpct + "%" : "—"}</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Audiograma Tonal</div>
-    <div class="audiogram-box">
-      ${svgAudiograma}
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Umbrales Auditivos por Frecuencia</div>
-    <table>
-      <thead>
-        <tr>
-          <th style="text-align:left">Frecuencia</th>
-          <th>OD — Oído Derecho</th>
-          <th>OI — Oído Izquierdo</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${filasTonal}
-        ${ptaRow}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="section">
-    <div class="section-title">Clasificación Diagnóstica (ISO 1999)</div>
-    ${tablaClasif}
-    <div style="font-size:8pt;color:#666;margin-top:5px;line-height:1.4">
-      * Normal: ≤20 dB &nbsp;|&nbsp; Hipoacusia Leve: 21–40 dB &nbsp;|&nbsp; Hipoacusia Moderada: 41–60 dB &nbsp;|&nbsp; Hipoacusia Severa: 61–80 dB &nbsp;|&nbsp; Hipoacusia Profunda: &gt;80 dB
-    </div>
-  </div>
-
-  ${hayLogo ? `
-  <div class="section">
-    <div class="section-title">Logoaudiometría — Discriminación Verbal</div>
-    ${logoODHtml}
-    ${logoOIHtml}
-  </div>
-  ` : ""}
-
-  <div class="firma-area">
-    <div class="firma-box">
-      <div style="height:40px"></div>
-      <div class="firma-line"></div>
-      <div class="firma-label">Firma y sello del profesional</div>
-    </div>
-  </div>
-
-  <div class="report-footer">
-    <div class="disclaimer">
-      <strong>Audiómetro Clínico Pro</strong> — Solo referencia clínica.<br>
-      Usar auriculares calibrados. Los valores deben ser interpretados por un profesional habilitado.
-    </div>
-    <div class="print-info">
-      Impreso: ${hoy}<br>
-      HC: ${this._esc(paciente.hc) || "—"}
-    </div>
-  </div>
-
-  <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
-
-</div>
+<p style="margin-top: 40px; text-align:right">Impreso: ${hoy}</p>
 </body>
 </html>`;
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // SVG AUDIOGRAMA (VERSIÓN SIMPLIFICADA PARA PRUEBA)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  _generarSVGAudiograma(resultados, maskResultados) {
+    const SVG_W = 560;
+    const SVG_H = 320;
+    const PAD_L = 52;
+    const PAD_R = 20;
+    const PAD_T = 24;
+    const PAD_B = 36;
+    const CHART_W = SVG_W - PAD_L - PAD_R;
+    const CHART_H = SVG_H - PAD_T - PAD_B;
+    const DB_MIN = -10;
+    const DB_MAX = 120;
+    const FREQS = [250, 500, 1000, 2000, 3000, 4000, 6000, 8000];
+    
+    const xPos = (i) => PAD_L + (i / (FREQS.length - 1)) * CHART_W;
+    const yPos = (db) => PAD_T + ((db - DB_MIN) / (DB_MAX - DB_MIN)) * CHART_H;
+    
+    let lines = [];
+    
+    // Grid
+    for (let i = 0; i <= FREQS.length - 1; i++) {
+      const x = xPos(i);
+      lines.push(`<line x1="${x}" y1="${PAD_T}" x2="${x}" y2="${SVG_H - PAD_B}" stroke="#ddd" stroke-width="0.5"/>`);
+    }
+    
+    return `<svg width="${SVG_W}" height="${SVG_H}" xmlns="http://www.w3.org/2000/svg">
+      <rect x="${PAD_L}" y="${PAD_T}" width="${CHART_W}" height="${CHART_H}" fill="none" stroke="#333" stroke-width="1"/>
+      ${lines.join("")}
+      <text x="${PAD_L - 30}" y="${PAD_T + CHART_H/2}" transform="rotate(-90, ${PAD_L - 30}, ${PAD_T + CHART_H/2})" text-anchor="middle">dB HL</text>
+    </svg>`;
   },
 
   // ─────────────────────────────────────────────────────────────────────────
   // HELPERS
   // ─────────────────────────────────────────────────────────────────────────
 
-  _esc(value) {
-    if (value === null || value === undefined) return "";
-    return String(value)
+  _escapeHtml(str) {
+    if (!str) return "";
+    return String(str)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  },
-
-  _clasifColor(cls) {
-    const map = {
-      normal:   { bg: "rgba(16,185,129,0.15)",  text: "#065f46", border: "#10b981" },
-      leve:     { bg: "rgba(212,175,55,0.2)",   text: "#78620a", border: "#d4af37" },
-      moderada: { bg: "rgba(245,158,11,0.18)",  text: "#92400e", border: "#f59e0b" },
-      severa:   { bg: "rgba(234,88,12,0.18)",   text: "#7c2d12", border: "#ea580c" },
-      profunda: { bg: "rgba(239,68,68,0.18)",   text: "#7f1d1d", border: "#ef4444" }
-    };
-    return map[cls] || { bg: "#f0f0f0", text: "#333", border: "#ccc" };
+      .replace(/'/g, "&#39;");
   }
-};
+
+}; // ← Cierre correcto del objeto PDF
