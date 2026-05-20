@@ -9,22 +9,35 @@ const PDF = {
    */
   descargar() {
     const paciente = State.paciente || {};
+    
+    // Verifica que html2pdf esté disponible
+    if (typeof html2pdf === 'undefined') {
+      UI.showMsg("msg-resultado", "⚠ Librería de PDF no cargada. Recarga la página.", "#ef4444");
+      return;
+    }
+    
     const html = this._generarHTML(paciente);
+    const filename = `Audiograma_${paciente.nombre || 'Paciente'}_${new Date().toISOString().split('T')[0]}.pdf`;
     
     const opt = {
       margin: 10,
-      filename: `Audiograma_${paciente.nombre || 'Paciente'}_${new Date().toISOString().split('T')[0]}.pdf`,
+      filename: filename,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2 },
       jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
     };
     
-    html2pdf().set(opt).from(html).save();
-    UI.showMsg("msg-resultado", "✓ PDF descargado", "#10b981");
+    try {
+      html2pdf().set(opt).from(html).save();
+      UI.showMsg("msg-resultado", "✓ PDF descargado", "#10b981");
+    } catch (error) {
+      console.error("Error al generar PDF:", error);
+      UI.showMsg("msg-resultado", "✗ Error al generar PDF", "#ef4444");
+    }
   },
 
   /**
-   * Genera contenido en base64 para enviar por correo
+   * Genera contenido para enviar por correo
    */
   enviarPorCorreo() {
     const paciente = State.paciente || {};
@@ -36,14 +49,14 @@ const PDF = {
     // Primero descarga el PDF
     this.descargar();
 
-    // Luego abre el cliente de correo
+    // Luego abre el cliente de correo con delay
     const subject = `Audiograma - ${paciente.nombre}`;
     const body = `Adjunto encontrará el audiograma clínico de ${paciente.nombre}.\n\nFecha: ${paciente.fecha || new Date().toLocaleDateString('es-AR')}\nH.C.: ${paciente.hc || 'N/A'}`;
     const mailtoLink = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     
     setTimeout(() => {
       window.location.href = mailtoLink;
-    }, 1000);
+    }, 1500);
   },
 
   /**
