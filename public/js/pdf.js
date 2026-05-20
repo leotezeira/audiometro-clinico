@@ -11,8 +11,6 @@ const PDF = {
 
   descargar() {
     try {
-      alert('⏳ Preparando PDF...');
-      
       const paciente = State?.paciente || {};
       const filename = `Audiograma_${paciente.nombre || 'Paciente'}_${new Date().toISOString().split('T')[0]}.html`;
       
@@ -21,9 +19,43 @@ const PDF = {
       
       // Crear blob
       const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
       
-      // Descargar usando link temporal
+      // Intentar usar Web Share API (nativa en Android)
+      if (navigator.share && navigator.canShare) {
+        try {
+          const file = new File([blob], filename, { type: 'text/html' });
+          if (navigator.canShare({ files: [file] })) {
+            navigator.share({
+              files: [file],
+              title: 'Audiograma',
+              text: 'Audiograma de ' + (paciente.nombre || 'Paciente')
+            }).then(() => {
+              UI?.showMsg?.('msg-resultado', '✓ Archivo compartido', '#10b981');
+            }).catch(err => {
+              if (err.name !== 'AbortError') {
+                console.error('Error en share:', err);
+                this._descargarLocal(blob, filename);
+              }
+            });
+            return;
+          }
+        } catch (e) {
+          console.warn('Web Share no disponible, usando descarga local');
+        }
+      }
+      
+      // Fallback: Descargar localmente
+      this._descargarLocal(blob, filename);
+      
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error: ' + error.message);
+    }
+  },
+
+  _descargarLocal(blob, filename) {
+    try {
+      const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = filename;
@@ -36,30 +68,10 @@ const PDF = {
       setTimeout(() => {
         UI?.showMsg?.('msg-resultado', '✓ Archivo listo para descargar', '#10b981');
       }, 500);
-      
     } catch (error) {
-      console.error('Error:', error);
-      alert('Error: ' + error.message);
+      console.error('Error en descarga local:', error);
+      alert('Error al descargar: ' + error.message);
     }
-  },
-
-  enviarPorCorreo() {
-    const paciente = State?.paciente || {};
-    if (!paciente.nombre) {
-      alert('Completa los datos del paciente primero');
-      return;
-    }
-
-    // Descargar primero
-    this.descargar();
-
-    // Luego abrir correo
-    setTimeout(() => {
-      const subject = 'Audiograma - ' + paciente.nombre;
-      const body = 'Adjunto encontrará el audiograma clínico de ' + paciente.nombre + '.\n\nFecha: ' + (paciente.fecha || new Date().toLocaleDateString('es-AR')) + '\nH.C.: ' + (paciente.hc || 'N/A');
-      const mailtoLink = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
-      window.location.href = mailtoLink;
-    }, 2000);
   },
 
   _generarHTMLCompleto() {
