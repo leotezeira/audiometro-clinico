@@ -1,164 +1,634 @@
 /**
  * PDF.JS
- * Generación de PDF real con html2pdf + funciones de descarga y correo
+ * Sistema profesional PDF para PWA Android/iOS
+ * Compatible con:
+ * - Android Chrome
+ * - TWA
+ * - PWA
+ * - Gmail
+ * - WhatsApp
+ * - Compartir nativo
  */
 
 const PDF = {
-  descargar: function() {
-    console.log("PDF.descargar() called");
-    const paciente = State.paciente || {};
-    
-    if (typeof html2pdf === 'undefined') {
-      alert("Librería de PDF no cargada. Recarga la página.");
-      return;
-    }
-    
-    const html = this._generarHTML(paciente);
-    const filename = `Audiograma_${paciente.nombre || 'Paciente'}_${new Date().toISOString().split('T')[0]}.pdf`;
-    
-    const opt = {
-      margin: 10,
-      filename: filename,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2 },
-      jsPDF: { orientation: 'portrait', unit: 'mm', format: 'a4' }
-    };
-    
+
+  /**
+   * DESCARGAR PDF
+   */
+  descargar: async function () {
+
     try {
-      html2pdf().set(opt).from(html).save();
-      if (UI && UI.showMsg) {
-        UI.showMsg("msg-resultado", "✓ PDF descargado", "#10b981");
+
+      const pdfBlob = await this._crearPDFBlob();
+
+      const paciente = State.paciente || {};
+
+      const filename =
+        `Audiograma_${paciente.nombre || "Paciente"}_${Date.now()}.pdf`;
+
+      const url = URL.createObjectURL(pdfBlob);
+
+      const a = document.createElement("a");
+
+      a.href = url;
+      a.download = filename;
+
+      document.body.appendChild(a);
+
+      a.click();
+
+      a.remove();
+
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 3000);
+
+      UI?.showMsg?.(
+        "msg-resultado",
+        "✓ PDF descargado",
+        "#10b981"
+      );
+
+    } catch (err) {
+
+      console.error(err);
+
+      alert("Error al generar PDF");
+
+    }
+
+  },
+
+  /**
+   * VER PDF EN APP
+   * Ideal para Android PWA
+   */
+  verPDF: async function () {
+
+    try {
+
+      const pdfBlob = await this._crearPDFBlob();
+
+      const url = URL.createObjectURL(pdfBlob);
+
+      window.open(url, "_blank");
+
+    } catch (err) {
+
+      console.error(err);
+
+      alert("No se pudo abrir el PDF");
+
+    }
+
+  },
+
+  /**
+   * COMPARTIR PDF
+   * Android/iPhone moderno
+   */
+  compartirPDF: async function () {
+
+    try {
+
+      const pdfBlob = await this._crearPDFBlob();
+
+      const paciente = State.paciente || {};
+
+      const filename =
+        `Audiograma_${paciente.nombre || "Paciente"}.pdf`;
+
+      const file = new File(
+        [pdfBlob],
+        filename,
+        {
+          type: "application/pdf"
+        }
+      );
+
+      /**
+       * SHARE NATIVO
+       */
+      if (
+        navigator.share &&
+        navigator.canShare &&
+        navigator.canShare({ files: [file] })
+      ) {
+
+        await navigator.share({
+
+          title: "Audiograma Clínico",
+
+          text:
+            "Audiograma clínico adjunto",
+
+          files: [file]
+
+        });
+
+      } else {
+
+        /**
+         * FALLBACK
+         */
+        const url = URL.createObjectURL(pdfBlob);
+
+        window.open(url, "_blank");
+
       }
-    } catch (error) {
-      console.error("Error al generar PDF:", error);
-      alert("Error al generar PDF: " + error.message);
+
+    } catch (err) {
+
+      console.error(err);
+
+      alert("Error al compartir PDF");
+
     }
+
   },
 
-  enviarPorCorreo: function() {
-    console.log("PDF.enviarPorCorreo() called");
+  /**
+   * CREAR BLOB PDF
+   */
+  _crearPDFBlob: async function () {
+
+    if (typeof html2pdf === "undefined") {
+
+      throw new Error(
+        "html2pdf no está cargado"
+      );
+
+    }
+
     const paciente = State.paciente || {};
-    if (!paciente.nombre) {
-      alert("Completa los datos del paciente primero");
-      return;
+
+    const html =
+      this._generarHTML(paciente);
+
+    /**
+     * CONTENEDOR REAL
+     * IMPORTANTE PARA MOBILE
+     */
+    const container =
+      document.createElement("div");
+
+    container.innerHTML = html;
+
+    container.style.position = "fixed";
+    container.style.left = "-99999px";
+    container.style.top = "0";
+
+    container.style.width = "210mm";
+
+    container.style.background = "#ffffff";
+
+    document.body.appendChild(container);
+
+    const filename =
+      `Audiograma_${paciente.nombre || "Paciente"}.pdf`;
+
+    const opt = {
+
+      margin: [8, 8, 8, 8],
+
+      filename: filename,
+
+      image: {
+        type: "jpeg",
+        quality: 1
+      },
+
+      html2canvas: {
+
+        scale:
+          window.devicePixelRatio > 1
+            ? 2
+            : 1,
+
+        useCORS: true,
+
+        letterRendering: true,
+
+        scrollY: 0,
+
+        backgroundColor: "#ffffff"
+
+      },
+
+      jsPDF: {
+
+        unit: "mm",
+
+        format: "a4",
+
+        orientation: "portrait"
+
+      },
+
+      pagebreak: {
+
+        mode: [
+          "avoid-all",
+          "css",
+          "legacy"
+        ]
+
+      }
+
+    };
+
+    try {
+
+      const worker =
+        html2pdf()
+          .set(opt)
+          .from(container);
+
+      const pdfBlob =
+        await worker.outputPdf("blob");
+
+      document.body.removeChild(container);
+
+      return pdfBlob;
+
+    } catch (err) {
+
+      document.body.removeChild(container);
+
+      throw err;
+
     }
 
-    this.descargar();
-
-    const subject = "Audiograma - " + (paciente.nombre || "Paciente");
-    const body = "Adjunto encontrará el audiograma clínico de " + paciente.nombre + ".\n\nFecha: " + (paciente.fecha || new Date().toLocaleDateString('es-AR')) + "\nH.C.: " + (paciente.hc || 'N/A');
-    const mailtoLink = "mailto:?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
-    
-    setTimeout(() => {
-      window.location.href = mailtoLink;
-    }, 1500);
   },
 
-  exportar: function() {
-    this.descargar();
-  },
+  /**
+   * GENERAR HTML PDF
+   */
+  _generarHTML: function (paciente) {
 
-  _generarHTML: function(paciente) {
-    const resultados = State.resultados || { OD: {}, OI: {} };
-    const maskResultados = State.maskResultados || { OD: {}, OI: {} };
-    const logoResultados = State.logoResultados || { OD: [], OI: [] };
+    const resultados =
+      State.resultados || {
+        OD: {},
+        OI: {}
+      };
 
-    const ptaOD = Classifications.calcularPTA(resultados.OD);
-    const ptaOI = Classifications.calcularPTA(resultados.OI);
-    const cOD = Classifications.clasificar(ptaOD);
-    const cOI = Classifications.clasificar(ptaOI);
+    const maskResultados =
+      State.maskResultados || {
+        OD: {},
+        OI: {}
+      };
+
+    const logoResultados =
+      State.logoResultados || {
+        OD: [],
+        OI: []
+      };
+
+    const ptaOD =
+      Classifications.calcularPTA(
+        resultados.OD
+      );
+
+    const ptaOI =
+      Classifications.calcularPTA(
+        resultados.OI
+      );
+
+    const cOD =
+      Classifications.clasificar(
+        ptaOD
+      );
+
+    const cOI =
+      Classifications.clasificar(
+        ptaOI
+      );
 
     const NA = "N/A";
 
-    const filasTonal = FREQUENCIES.map(f => {
-      const od = resultados.OD[f] !== undefined ? resultados.OD[f] + " dB" : NA;
-      const oi = resultados.OI[f] !== undefined ? resultados.OI[f] + " dB" : NA;
-      const odMask = maskResultados.OD[f] !== undefined ? " (NE:" + maskResultados.OD[f] + "dB)" : "";
-      const oiMask = maskResultados.OI[f] !== undefined ? " (NE:" + maskResultados.OI[f] + "dB)" : "";
-      return "<tr><td>" + f + " Hz</td><td style=\"color:#c04040\">" + od + odMask + "</td><td style=\"color:#2a60a0\">" + oi + oiMask + "</td></tr>";
-    }).join("");
+    const filasTonal =
+      FREQUENCIES.map(f => {
 
-    const filasLogo = (oido) => (logoResultados[oido] || []).map(r =>
-      "<tr><td>" + r.palabra + "</td><td>" + r.dB + " dB</td><td>" + (r.correcta ? "✓" : "✗") + "</td></tr>"
-    ).join("");
+        const od =
+          resultados.OD[f] !== undefined
+            ? resultados.OD[f] + " dB"
+            : NA;
 
-    const pctLogo = (oido) => {
-      const pct = Classifications.calcularDiscriminacion(logoResultados[oido] || []);
-      return pct === null ? NA : pct + "%";
-    };
+        const oi =
+          resultados.OI[f] !== undefined
+            ? resultados.OI[f] + " dB"
+            : NA;
 
-    const pacienteNombre = this._esc(paciente.nombre) || NA;
-    const pacienteEdad = this._esc(paciente.edad) || NA;
-    const pacienteHC = this._esc(paciente.hc) || NA;
-    const pacienteFecha = this._esc(paciente.fecha) || new Date().toLocaleDateString("es-AR");
-    const pacienteMotivo = this._esc(paciente.motivo) || NA;
-    const pacienteObs = this._esc(paciente.obs) || NA;
+        const odMask =
+          maskResultados.OD[f] !== undefined
+            ? ` (NE:${maskResultados.OD[f]}dB)`
+            : "";
 
-    let html = "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\" />";
-    html += "<title>Audiograma — " + pacienteNombre + "</title>";
-    html += "<style>";
-    html += "body{font-family:Georgia,serif;margin:0;padding:20px;color:#111}";
-    html += "h1{text-align:center;font-size:20px;letter-spacing:2px;border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:4px}";
-    html += "h2{font-size:14px;margin-top:24px;border-left:3px solid #111;padding-left:8px}";
-    html += "table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}";
-    html += "th{background:#1a1a2e;color:#fff;padding:7px}";
-    html += "td{border:1px solid #ccc;padding:5px 10px;text-align:center}";
-    html += ".info{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:10px 0;font-size:12px}";
-    html += ".info div{padding:6px 10px;background:#f5f5f5;border-radius:4px}";
-    html += ".muted{color:#555}";
-    html += "</style>";
-    html += "</head><body>";
-    html += "<h1>AUDIOGRAMA CLÍNICO</h1>";
-    html += "<div class=\"info\">";
-    html += "<div><strong>Paciente:</strong> " + pacienteNombre + "</div>";
-    html += "<div><strong>Edad:</strong> " + pacienteEdad + "</div>";
-    html += "<div><strong>HC:</strong> " + pacienteHC + "</div>";
-    html += "<div><strong>Fecha:</strong> " + pacienteFecha + "</div>";
-    html += "<div style=\"grid-column:1/-1\"><strong>Motivo:</strong> <span class=\"muted\">" + pacienteMotivo + "</span></div>";
-    html += "<div style=\"grid-column:1/-1\"><strong>Obs:</strong> <span class=\"muted\">" + pacienteObs + "</span></div>";
-    html += "</div>";
-    html += "<h2>Audiometría Tonal — Umbrales</h2>";
-    html += "<table><tr><th>Frecuencia</th><th>OD (Derecho)</th><th>OI (Izquierdo)</th></tr>" + filasTonal + "</table>";
-    html += "<h2>Clasificación Diagnóstica</h2>";
-    html += "<p style=\"font-size:12px;margin-top:8px\">";
-    if (ptaOD !== null) {
-      html += "<strong>OD — PTA: " + ptaOD.toFixed(0) + " dB → " + (cOD && cOD.label ? this._esc(cOD.label) : NA) + "</strong><br>";
-    } else {
-      html += "OD: " + NA + "<br>";
-    }
-    if (ptaOI !== null) {
-      html += "<strong>OI — PTA: " + ptaOI.toFixed(0) + " dB → " + (cOI && cOI.label ? this._esc(cOI.label) : NA) + "</strong>";
-    } else {
-      html += "OI: " + NA;
-    }
-    html += "</p>";
+        const oiMask =
+          maskResultados.OI[f] !== undefined
+            ? ` (NE:${maskResultados.OI[f]}dB)`
+            : "";
 
-    if (logoResultados.OD && logoResultados.OD.length > 0 || logoResultados.OI && logoResultados.OI.length > 0) {
-      html += "<h2>Logoaudiometría</h2>";
-      if (logoResultados.OD && logoResultados.OD.length > 0) {
-        html += "<p style=\"font-size:12px\"><strong>Oído Derecho — Discriminación: " + pctLogo("OD") + "</strong></p>";
-        html += "<table><tr><th>Palabra</th><th>Nivel</th><th>Correcta</th></tr>" + filasLogo("OD") + "</table>";
-      }
-      if (logoResultados.OI && logoResultados.OI.length > 0) {
-        html += "<p style=\"font-size:12px;margin-top:12px\"><strong>Oído Izquierdo — Discriminación: " + pctLogo("OI") + "</strong></p>";
-        html += "<table><tr><th>Palabra</th><th>Nivel</th><th>Correcta</th></tr>" + filasLogo("OI") + "</table>";
-      }
-    }
+        return `
+          <tr>
+            <td>${f} Hz</td>
+            <td class="od">
+              ${od}${odMask}
+            </td>
+            <td class="oi">
+              ${oi}${oiMask}
+            </td>
+          </tr>
+        `;
 
-    html += "<br><hr style=\"margin-top:30px\">";
-    html += "<p style=\"font-size:10px;color:#666;text-align:center\">Generado con Audiómetro Clínico Pro · Solo referencia clínica</p>";
-    html += "</body></html>";
-    
-    return html;
+      }).join("");
+
+    return `
+
+<!doctype html>
+
+<html lang="es">
+
+<head>
+
+<meta charset="utf-8">
+
+<title>
+Audiograma
+</title>
+
+<style>
+
+*{
+  box-sizing:border-box;
+}
+
+body{
+
+  font-family:Arial,sans-serif;
+
+  color:#111;
+
+  background:#fff;
+
+  margin:0;
+
+  padding:20px;
+
+  width:190mm;
+
+}
+
+h1{
+
+  text-align:center;
+
+  font-size:24px;
+
+  margin-bottom:20px;
+
+  border-bottom:2px solid #111;
+
+  padding-bottom:10px;
+
+}
+
+h2{
+
+  margin-top:25px;
+
+  font-size:18px;
+
+  border-left:4px solid #111;
+
+  padding-left:10px;
+
+}
+
+table{
+
+  width:100%;
+
+  border-collapse:collapse;
+
+  margin-top:10px;
+
+  page-break-inside:avoid;
+
+}
+
+th{
+
+  background:#151530;
+
+  color:white;
+
+  padding:10px;
+
+  font-size:13px;
+
+}
+
+td{
+
+  border:1px solid #ccc;
+
+  padding:8px;
+
+  text-align:center;
+
+  font-size:12px;
+
+}
+
+.od{
+  color:#c04040;
+}
+
+.oi{
+  color:#2a60a0;
+}
+
+.info{
+
+  display:grid;
+
+  grid-template-columns:1fr 1fr;
+
+  gap:8px;
+
+  margin-bottom:20px;
+
+}
+
+.info div{
+
+  background:#f3f3f3;
+
+  padding:10px;
+
+  border-radius:6px;
+
+  font-size:12px;
+
+}
+
+.full{
+  grid-column:1/-1;
+}
+
+p,table,h2,.info{
+  break-inside:avoid;
+}
+
+.footer{
+
+  margin-top:30px;
+
+  text-align:center;
+
+  color:#666;
+
+  font-size:10px;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>
+AUDIOGRAMA CLÍNICO
+</h1>
+
+<div class="info">
+
+  <div>
+    <strong>Paciente:</strong>
+    ${this._esc(paciente.nombre) || NA}
+  </div>
+
+  <div>
+    <strong>Edad:</strong>
+    ${this._esc(paciente.edad) || NA}
+  </div>
+
+  <div>
+    <strong>HC:</strong>
+    ${this._esc(paciente.hc) || NA}
+  </div>
+
+  <div>
+    <strong>Fecha:</strong>
+    ${this._esc(paciente.fecha) || new Date().toLocaleDateString("es-AR")}
+  </div>
+
+  <div class="full">
+    <strong>Motivo:</strong>
+    ${this._esc(paciente.motivo) || NA}
+  </div>
+
+  <div class="full">
+    <strong>Observaciones:</strong>
+    ${this._esc(paciente.obs) || NA}
+  </div>
+
+</div>
+
+<h2>
+Audiometría Tonal
+</h2>
+
+<table>
+
+<tr>
+
+<th>
+Frecuencia
+</th>
+
+<th>
+OD
+</th>
+
+<th>
+OI
+</th>
+
+</tr>
+
+${filasTonal}
+
+</table>
+
+<h2>
+Clasificación Diagnóstica
+</h2>
+
+<p>
+
+${
+  ptaOD !== null
+    ? `<strong>
+        OD:
+        ${ptaOD.toFixed(0)} dB
+        →
+        ${cOD?.label || NA}
+      </strong>`
+    : "OD: N/A"
+}
+
+<br><br>
+
+${
+  ptaOI !== null
+    ? `<strong>
+        OI:
+        ${ptaOI.toFixed(0)} dB
+        →
+        ${cOI?.label || NA}
+      </strong>`
+    : "OI: N/A"
+}
+
+</p>
+
+<div class="footer">
+
+Generado con Audiómetro Clínico Pro
+
+</div>
+
+</body>
+
+</html>
+
+`;
+
   },
 
-  _esc: function(value) {
-    if (value === null || value === undefined) return "";
+  /**
+   * ESCAPE HTML
+   */
+  _esc: function (value) {
+
+    if (
+      value === null ||
+      value === undefined
+    ) {
+      return "";
+    }
+
     return String(value)
+
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
+
   }
+
 };
