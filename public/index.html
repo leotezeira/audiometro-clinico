@@ -11,7 +11,7 @@
   <link rel="icon" href="/logoappclinica.png" type="image/png">
   <title>Audiómetro Clínico Pro</title>
   <link rel="stylesheet" href="css/styles.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <!-- html2pdf.js ya no es necesario: el PDF se genera con window.print() -->
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
@@ -223,7 +223,7 @@
   <div class="card">
     <div class="db-level-info">
       <span class="card-title" style="margin:0">Nivel de Intensidad</span>
-      <span id="logo-db-val" style="font-size:22px;color:var(--primary-light);font-weight:700">40 dB</span>
+      <span id="logo-db-val" style="font-size:22px;color:var(--primary);font-weight:700">40 dB</span>
     </div>
     <input type="range" id="logo-db-slider" min="-10" max="120" step="5" value="40" oninput="Tonal.setDB(this.value)">
   </div>
@@ -242,8 +242,8 @@
       </div>
     </div>
     <div id="logo-done" style="display:none;text-align:center">
-      <div style="color:var(--success-light);font-size:15px;margin-bottom:12px;letter-spacing:0.5px;font-weight:700">✓ Prueba Completada</div>
-      <div style="font-size:24px;color:var(--primary-light);margin-bottom:16px;font-weight:700" id="logo-pct-display"></div>
+      <div style="color:var(--success);font-size:15px;margin-bottom:12px;letter-spacing:0.5px;font-weight:700">✓ Prueba Completada</div>
+      <div style="font-size:24px;color:var(--primary);margin-bottom:16px;font-weight:700" id="logo-pct-display"></div>
       <button class="btn btn-primary" onclick="Logo.reiniciar()">↺ Reiniciar Oído</button>
     </div>
   </div>
@@ -285,9 +285,12 @@
   </div>
 
   <div class="btn-row">
-    <button class="btn btn-success" onclick="Storage.guardarSesion()"><svg class="icon" aria-hidden="true"><use href="#i-save"></use></svg> Guardar Sesión</button>
-    <button class="btn btn-primary" onclick="PDF.descargar()"><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg> Descargar PDF</button>
-    <button class="btn btn-primary" onclick="PDF.enviarPorCorreo()"><svg class="icon" aria-hidden="true"><use href="#i-mail"></use></svg> Enviar por Correo</button>
+    <button class="btn btn-success" onclick="Storage.guardarSesion()">
+      <svg class="icon" aria-hidden="true"><use href="#i-save"></use></svg> Guardar Sesión
+    </button>
+    <button class="btn btn-primary" onclick="PDF.descargar()">
+      <svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg> Exportar PDF
+    </button>
   </div>
   <div class="mensaje" id="msg-resultado"></div>
 </div>
@@ -302,7 +305,9 @@
 
   <div style="max-width:100%">
     <div class="btn-row" style="margin-bottom:16px">
-      <button class="btn btn-danger" onclick="Storage.borrarTodo()"><svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg> Borrar Todo</button>
+      <button class="btn btn-danger" onclick="Storage.borrarTodo()">
+        <svg class="icon" aria-hidden="true"><use href="#i-trash"></use></svg> Borrar Todo
+      </button>
     </div>
     <div id="historial-lista"></div>
   </div>
