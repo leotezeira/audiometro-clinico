@@ -24,6 +24,7 @@ const CORE_ASSETS = [
   "/js/patient.js",
   "/js/ui.js",
   "/js/pdf.js",
+  "/js/jspdf.umd.min.js",
   "/js/app.js"
 ];
 
