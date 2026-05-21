@@ -342,44 +342,8 @@ const PDF = {
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
   }
-        if (m === '>') return '&gt;';
-        return m;
-      });
-    },
-    
-    _mostrarMensaje(msg, color) {
-      if (typeof UI !== 'undefined' && UI.showMsg) {
-        UI.showMsg("msg-resultado", msg, color);
-      } else {
-        console.log(msg);
-      }
-    }
-  };
-  
-  // Exponer globalmente
-  window.PDF = PDF;
-  console.log('PDF cargado correctamente. Método descargar:', typeof PDF.descargar);
-  
-  // Opcional: Conectar botón automáticamente
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      const btn = document.getElementById('btnExportarPDF') || document.querySelector('[onclick*="PDF.descargar"]');
-      if (btn && !btn.hasListener) {
-        btn.hasListener = true;
-        const oldOnClick = btn.onclick;
-        btn.onclick = null;
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          PDF.descargar();
-        });
-        console.log('Botón conectado automáticamente');
-      }
-    });
-  } else {
-    const btn = document.getElementById('btnExportarPDF');
-    if (btn) {
-      btn.addEventListener('click', () => PDF.descargar());
-    }
-  }
-  
-})();
+};
+
+// Exponer globalmente
+window.PDF = PDF;
+console.log('PDF cargado correctamente. Método descargar:', typeof PDF.descargar);
