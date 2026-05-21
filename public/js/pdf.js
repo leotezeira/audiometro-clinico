@@ -1,50 +1,241 @@
 /**
- * PDF.JS - Descarga directa sin ventanas externas
- * Funciona 100% en PWA standalone
- * Descarga archivo HTML directamente sin abrir ventanas
+ * PDF.JS - Exportar audiograma como PDF/HTML
+ * Funciona en móviles (Web Share) y escritorio (Descarga + Modal)
+ * Sin dependencias externas, sin librerías CDN
  */
 
 const PDF = {
   
   descargar() {
     try {
-      console.log("=== Iniciando descarga ===");
-      
       const paciente = State?.paciente || {};
       if (!paciente.nombre) {
         alert("⚠️ Completa los datos del paciente primero");
         return;
       }
       
-      // Generar contenido
       const htmlContent = this._generarHTML();
+      const nombreArchivo = `Audiograma_${paciente.nombre}_${new Date().toISOString().split('T')[0]}`;
       
-      // Crear blob
-      const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+      // Detectar si es móvil/PWA
+      const esMobil = /Android|iPhone|iPad|iPod|Opera Mini/i.test(navigator.userAgent) || 
+                      (window.navigator.standalone === true);
       
-      // Crear URL y elemento de descarga
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Audiograma_${paciente.nombre}_${new Date().toISOString().split('T')[0]}.html`;
-      link.style.display = 'none';
+      console.log("Intentando exportar. ¿Móvil?", esMobil);
       
-      // Descargar
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      // Limpiar
-      setTimeout(() => URL.revokeObjectURL(url), 100);
-      
-      // Feedback
-      UI?.showMsg?.('msg-resultado', '✓ Archivo descargado a descargas', '#10b981');
-      console.log("Archivo descargado:", link.download);
+      if (esMobil) {
+        // En móvil: intentar Web Share primero
+        this._compartirViaWebShare(htmlContent, nombreArchivo)
+          .catch(() => {
+            // Si Web Share falla: mostrar en modal
+            this._mostrarModal(htmlContent);
+          });
+      } else {
+        // En escritorio: ofrecer ambas opciones
+        this._mostrarOpcionesEscritorio(htmlContent, nombreArchivo);
+      }
       
     } catch (error) {
       console.error("Error:", error);
-      alert("❌ Error al descargar: " + error.message);
+      alert("❌ Error: " + error.message);
     }
+  },
+
+  async _compartirViaWebShare(htmlContent, nombreArchivo) {
+    // Verificar si el navegador soporta Web Share
+    if (!navigator.share) {
+      throw new Error("Web Share no disponible");
+    }
+    
+    const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+    const archivo = new File([blob], `${nombreArchivo}.html`, { type: "text/html" });
+    
+    try {
+      await navigator.share({
+        title: 'Audiograma Clínico',
+        text: `Informe de audiometría - ${nombreArchivo}`,
+        files: [archivo]
+      });
+      UI?.showMsg?.('msg-resultado', '✓ Compartido exitosamente', '#10b981');
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        throw error; // Re-lanzar para que se capture en descargar()
+      }
+    }
+  },
+
+  _mostrarOpcionesEscritorio(htmlContent, nombreArchivo) {
+    // Crear modal con opciones
+    const modal = document.createElement('div');
+    modal.id = 'pdf-modal';
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    `;
+    
+    const contenedor = document.createElement('div');
+    contenedor.style.cssText = `
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      max-width: 500px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      animation: slideIn 0.3s ease;
+    `;
+    
+    contenedor.innerHTML = `
+      <h2 style="margin-top:0;color:#1a1a3e;font-size:20px">Exportar Audiograma</h2>
+      <p style="color:#666;margin:15px 0">¿Cómo deseas exportar el informe?</p>
+      <div style="display:flex;gap:10px;margin-top:25px">
+        <button id="btn-descargar" style="
+          flex:1;padding:12px;background:#3b82f6;color:white;border:none;
+          border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;
+        ">📥 Descargar HTML</button>
+        <button id="btn-modal" style="
+          flex:1;padding:12px;background:#10b981;color:white;border:none;
+          border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;
+        ">👁 Ver e Imprimir</button>
+      </div>
+      <button id="btn-cerrar" style="
+        width:100%;margin-top:10px;padding:10px;background:#e5e7eb;color:#333;
+        border:none;border-radius:6px;cursor:pointer;font-size:14px;
+      ">Cancelar</button>
+    `;
+    
+    modal.appendChild(contenedor);
+    document.body.appendChild(modal);
+    
+    // Agregar estilos de animación
+    if (!document.getElementById('pdf-styles')) {
+      const style = document.createElement('style');
+      style.id = 'pdf-styles';
+      style.textContent = `
+        @keyframes slideIn {
+          from { transform: translateY(-30px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    // Event listeners
+    document.getElementById('btn-descargar').addEventListener('click', () => {
+      this._descargarHTML(htmlContent, nombreArchivo);
+      modal.remove();
+    });
+    
+    document.getElementById('btn-modal').addEventListener('click', () => {
+      this._mostrarModal(htmlContent);
+      modal.remove();
+    });
+    
+    document.getElementById('btn-cerrar').addEventListener('click', () => {
+      modal.remove();
+    });
+  },
+
+  _descargarHTML(htmlContent, nombreArchivo) {
+    const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${nombreArchivo}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+    UI?.showMsg?.('msg-resultado', '✓ Descargado como HTML', '#10b981');
+  },
+
+  _mostrarModal(htmlContent) {
+    const modal = document.createElement('div');
+    modal.id = 'pdf-preview-modal';
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      z-index: 9999;
+      padding: 10px;
+    `;
+    
+    // Barra superior con botones
+    const toolbar = document.createElement('div');
+    toolbar.style.cssText = `
+      background: white;
+      padding: 15px;
+      border-radius: 8px 8px 0 0;
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    `;
+    
+    toolbar.innerHTML = `
+      <h3 style="margin:0;color:#1a1a3e;font-size:18px">Vista Previa</h3>
+      <div style="display:flex;gap:8px">
+        <button id="btn-imprimir" style="
+          padding:8px 16px;background:#10b981;color:white;border:none;
+          border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;
+        ">🖨 Imprimir/PDF</button>
+        <button id="btn-cerrar-preview" style="
+          padding:8px 16px;background:#ef4444;color:white;border:none;
+          border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;
+        ">✕ Cerrar</button>
+      </div>
+    `;
+    
+    // iFrame para mostrar HTML
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = `
+      flex: 1;
+      border: none;
+      border-radius: 0 0 8px 8px;
+      background: white;
+    `;
+    
+    modal.appendChild(toolbar);
+    modal.appendChild(iframe);
+    document.body.appendChild(modal);
+    
+    // Escribir contenido en iframe
+    iframe.contentDocument.open();
+    iframe.contentDocument.write(htmlContent);
+    iframe.contentDocument.close();
+    
+    // Event listeners
+    document.getElementById('btn-imprimir').addEventListener('click', () => {
+      iframe.contentWindow.print();
+    });
+    
+    document.getElementById('btn-cerrar-preview').addEventListener('click', () => {
+      modal.remove();
+    });
+    
+    // Cerrar con ESC
+    const closeOnEscape = (e) => {
+      if (e.key === 'Escape') {
+        modal.remove();
+        document.removeEventListener('keydown', closeOnEscape);
+      }
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    
+    UI?.showMsg?.('msg-resultado', '✓ Previsualización cargada. Haz clic en "Imprimir/PDF" para guardar como PDF', '#3b82f6');
   },
 
   _generarHTML() {
