@@ -25,28 +25,28 @@ const Audio = {
       return p;
     }
 
-    // Fallback: ChannelMerger + gains (L/R)
-    const splitter = ctx.createChannelSplitter(2);
+    // Fallback: gain separado por canal L/R usando ChannelMerger
     const merger = ctx.createChannelMerger(2);
     const gainL = ctx.createGain();
     const gainR = ctx.createGain();
 
-    // Si panValue es -1 => todo a L, +1 => todo a R
-    const left = panValue <= 0 ? 1 : 0;
-    const right = panValue >= 0 ? 1 : 0;
-    gainL.gain.setValueAtTime(left, ctx.currentTime);
-    gainR.gain.setValueAtTime(right, ctx.currentTime);
+    // -1 = izquierda, 0 = ambos, +1 = derecha
+    gainL.gain.setValueAtTime(panValue < 0 ? 1 : panValue === 0 ? 1 : 0, ctx.currentTime);
+    gainR.gain.setValueAtTime(panValue > 0 ? 1 : panValue === 0 ? 1 : 0, ctx.currentTime);
 
-    // Entrada mono: duplicamos al splitter con 2 canales
-    splitter.connect(gainL, 0);
-    splitter.connect(gainR, 0);
     gainL.connect(merger, 0, 0);
     gainR.connect(merger, 0, 1);
+    merger.connect(ctx.destination);
 
-    // Exponemos una interfaz "panner-like": input -> splitter, output -> merger
+    // input: nodo al que conectar la fuente de audio
+    // ambos gains reciben la misma señal mono
+    const inputGain = ctx.createGain();
+    inputGain.connect(gainL);
+    inputGain.connect(gainR);
+
     return {
-      input: splitter,
-      output: merger
+      input: inputGain,
+      output: null  // ya conectado a destination
     };
   },
 
@@ -93,10 +93,11 @@ const Audio = {
 
     // Panning: tono al oÃ­do seleccionado
     const panNode = this.createPanner(ctx, this.panForEar(ear));
-    if (panNode.input && panNode.output) {
+    if (panNode.input) {
+      // Fallback: output ya conectado a destination en createPanner
       gainMain.connect(panNode.input);
-      panNode.output.connect(ctx.destination);
     } else {
+      // StereoPannerNode: conectar normalmente
       gainMain.connect(panNode);
       panNode.connect(ctx.destination);
     }
@@ -142,10 +143,11 @@ const Audio = {
 
     // Panning: ruido al oÃ­do indicado
     const panNode = this.createPanner(ctx, this.panForEar(ear));
-    if (panNode.input && panNode.output) {
+    if (panNode.input) {
+      // Fallback: output ya conectado a destination en createPanner
       gainMask.connect(panNode.input);
-      panNode.output.connect(ctx.destination);
     } else {
+      // StereoPannerNode: conectar normalmente
       gainMask.connect(panNode);
       panNode.connect(ctx.destination);
     }
@@ -219,10 +221,11 @@ const Audio = {
     src.connect(gain);
 
     const panNode = this.createPanner(ctx, this.panForEar(ear));
-    if (panNode.input && panNode.output) {
+    if (panNode.input) {
+      // Fallback: output ya conectado a destination en createPanner
       gain.connect(panNode.input);
-      panNode.output.connect(ctx.destination);
     } else {
+      // StereoPannerNode: conectar normalmente
       gain.connect(panNode);
       panNode.connect(ctx.destination);
     }
