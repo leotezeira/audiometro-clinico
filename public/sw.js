@@ -4,29 +4,29 @@
    - Offline fallback to /index.html for navigation requests
 */
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const CACHE_NAME = `audiometro-clinico-${CACHE_VERSION}`;
 
 const CORE_ASSETS = [
-  "/",
-  "/index.html",
-  "/manifest.json",
-  "/logoappclinica.png",
-  "/css/styles.css",
-  "/js/constants.js",
-  "/js/state.js",
-  "/js/audio.js",
-  "/js/audiogram.js",
-  "/js/classifications.js",
-  "/js/storage.js",
-  "/js/logo.js",
-  "/js/tonal.js",
-  "/js/patient.js",
-  "/js/ui.js",
-  "/js/pdf.js",
-  "/js/jspdf.umd.min.js",
-  "/js/app.js"
-];
+  "./",
+  "index.html",
+  "manifest.json",
+  "logoappclinica.png",
+  "css/styles.css",
+  "js/constants.js",
+  "js/state.js",
+  "js/audio.js",
+  "js/audiogram.js",
+  "js/classifications.js",
+  "js/storage.js",
+  "js/logo.js",
+  "js/tonal.js",
+  "js/patient.js",
+  "js/ui.js",
+  "js/pdf.js",
+  "js/jspdf.umd.min.js",
+  "js/app.js"
+].map(asset => new URL(asset, self.registration.scope).href);
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -67,28 +67,35 @@ self.addEventListener("fetch", (event) => {
         try {
           const fresh = await fetch(request);
           const cache = await caches.open(CACHE_NAME);
-          cache.put(request, fresh.clone()).catch(() => {});
+          if (fresh.ok) cache.put(request, fresh.clone()).catch(error => {
+            console.warn("No se pudo actualizar la caché:", error);
+          });
           return fresh;
         } catch {
           const cached = await caches.match(request);
-          return cached || (await caches.match("/index.html")) || Response.error();
+          const indexUrl = new URL("index.html", self.registration.scope).href;
+          return cached || (await caches.match(indexUrl)) || Response.error();
         }
       })()
     );
     return;
   }
 
-  // Static assets: cache-first
+  // Static assets: network-first so deployments become visible immediately.
   event.respondWith(
     (async () => {
-      const cached = await caches.match(request);
-      if (cached) return cached;
-
-      const response = await fetch(request);
-      const cache = await caches.open(CACHE_NAME);
-      cache.put(request, response.clone()).catch(() => {});
-      return response;
+      try {
+        const fresh = await fetch(request);
+        if (fresh.ok) {
+          const cache = await caches.open(CACHE_NAME);
+          cache.put(request, fresh.clone()).catch(error => {
+            console.warn("No se pudo actualizar la caché:", error);
+          });
+        }
+        return fresh;
+      } catch {
+        return (await caches.match(request)) || Response.error();
+      }
     })()
   );
 });
-
