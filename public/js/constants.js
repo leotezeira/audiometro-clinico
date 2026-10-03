@@ -4,7 +4,11 @@
  */
 
 const FREQUENCIES = [250, 500, 1000, 2000, 4000, 8000];
-const PALABRAS = ["casa", "perro", "mar", "sol", "pan", "luz", "flor", "tren", "pez", "campo", "voz", "cielo", "agua", "verde", "noche"];
+const PALABRAS = [
+  "casa", "perro", "mar", "sol", "pan", "luz", "flor", "tren", "pez", "campo",
+  "voz", "cielo", "agua", "verde", "noche", "libro", "puente", "luna", "fuego",
+  "puerta", "bosque", "viento", "camino", "niña", "estrella"
+];
 
 // Colores para OD/OI y máscaras
 const COLOR_OD = "#2563eb";

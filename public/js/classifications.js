@@ -81,5 +81,35 @@ const Classifications = {
     if (!respuestas || !respuestas.length) return null;
     const correctas = respuestas.filter(r => r.correcta).length;
     return Math.round((correctas / respuestas.length) * 100);
+  },
+
+  /**
+   * Obtiene el porcentaje de reconocimiento por nivel de presentación (dB)
+   * para graficar la curva de desempeño real
+   */
+  obtenerCurvaDiscriminacion(respuestas) {
+    if (!respuestas || !respuestas.length) return [];
+
+    const grupos = new Map();
+
+    respuestas.forEach(r => {
+      const db = Number(r.dB);
+      if (!Number.isFinite(db)) return;
+
+      if (!grupos.has(db)) {
+        grupos.set(db, { dB: db, total: 0, correctas: 0 });
+      }
+
+      const item = grupos.get(db);
+      item.total += 1;
+      if (r.correcta) item.correctas += 1;
+    });
+
+    return [...grupos.values()]
+      .sort((a, b) => a.dB - b.dB)
+      .map(item => ({
+        dB: item.dB,
+        pct: Math.round((item.correctas / item.total) * 100)
+      }));
   }
 };

@@ -223,6 +223,30 @@ const PDF = {
 
     nextLine(4);
 
+    // ── Curva de reconocimiento del habla ─────────────────
+    checkPage(70);
+    doc.setFillColor(26, 32, 60);
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.rect(ml, y, cw, 7, "F");
+    doc.text("CURVA DE DESEMPEÑO DEL RECONOCIMIENTO DEL HABLA", ml + 4, y + 5);
+    y += 10;
+    this._dibujarCurvaReconocimientoPDF(doc, logoResultados, ml, y, cw, 55);
+    y += 62;
+
+    // ── Logoaudiometría resumen gráfico ───────────────────
+    checkPage(38);
+    doc.setFillColor(26, 32, 60);
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.rect(ml, y, cw, 7, "F");
+    doc.text("LOGOAUDIOMETRÍA — RESULTADOS COHERENTES", ml + 4, y + 5);
+    y += 10;
+    this._dibujarResumenLogoPDF(doc, logoResultados, ml, y, cw, 32);
+    y += 38;
+
     // ── Clasificación Diagnóstica ──────────────────────────
     checkPage(40);
     doc.setFillColor(26, 32, 60);
@@ -355,6 +379,123 @@ const PDF = {
     }
 
     return doc;
+  },
+
+  _dibujarCurvaReconocimientoPDF(doc, logoResultados, originX, originY, width, height) {
+    const odCurve = Classifications.obtenerCurvaDiscriminacion(logoResultados.OD);
+    const oiCurve = Classifications.obtenerCurvaDiscriminacion(logoResultados.OI);
+    const odPct = Classifications.calcularDiscriminacion(logoResultados.OD) ?? 0;
+    const oiPct = Classifications.calcularDiscriminacion(logoResultados.OI) ?? 0;
+
+    const allDb = [...odCurve.map(p => p.dB), ...oiCurve.map(p => p.dB)];
+    const minDb = allDb.length ? Math.min(...allDb, 0) : 0;
+    const maxDb = allDb.length ? Math.max(...allDb, 100) : 100;
+
+    const pad = { left: 12, right: 6, top: 6, bottom: 20 };
+    const x = db => originX + pad.left + ((db - minDb) / (Math.max(maxDb - minDb, 1))) * (width - pad.left - pad.right);
+    const y = pct => originY + pad.top + (1 - pct / 100) * (height - pad.top - pad.bottom);
+
+    const drawCurve = (curve, color) => {
+      if (!curve.length) return;
+      doc.setDrawColor(...color);
+      doc.setLineWidth(0.7);
+      for (let i = 0; i < curve.length - 1; i++) {
+        const p1 = curve[i];
+        const p2 = curve[i + 1];
+        doc.line(x(p1.dB), y(p1.pct), x(p2.dB), y(p2.pct));
+      }
+    };
+
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.2);
+    for (let value = 0; value <= 100; value += 20) {
+      const yy = y(value);
+      doc.line(originX + pad.left, yy, originX + width - pad.right, yy);
+      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(5.5);
+      doc.text(String(value) + "%", originX + 2, yy + 1.5);
+    }
+
+    for (let db = minDb; db <= maxDb; db += Math.max(10, Math.round((maxDb - minDb) / 5))) {
+      const xx = x(db);
+      doc.line(xx, originY + pad.top, xx, originY + height - pad.bottom);
+      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(5.5);
+      doc.text(String(db), xx - 1, originY + height - pad.bottom + 5, { align: "center" });
+    }
+
+    doc.setDrawColor(148, 163, 184);
+    doc.setLineWidth(0.4);
+    doc.line(originX + pad.left, originY + pad.top, originX + pad.left, originY + height - pad.bottom);
+    doc.line(originX + pad.left, originY + height - pad.bottom, originX + width - pad.right, originY + height - pad.bottom);
+
+    drawCurve(odCurve, [37, 99, 235]);
+    drawCurve(oiCurve, [20, 184, 166]);
+
+    if (odCurve.length) {
+      const last = odCurve[odCurve.length - 1];
+      doc.setFillColor(255, 255, 255);
+      doc.circle(x(last.dB), y(last.pct), 1.6, "FD");
+      doc.setTextColor(37, 99, 235);
+      doc.setFontSize(6);
+      doc.text("OD " + last.pct + "%", originX + width - pad.right - 12, originY + pad.top + 6, { align: "right" });
+    }
+    if (oiCurve.length) {
+      const last = oiCurve[oiCurve.length - 1];
+      doc.setFillColor(255, 255, 255);
+      doc.circle(x(last.dB), y(last.pct), 1.6, "FD");
+      doc.setTextColor(20, 184, 166);
+      doc.setFontSize(6);
+      doc.text("OI " + last.pct + "%", originX + width - pad.right - 12, originY + pad.top + 12, { align: "right" });
+    }
+
+    if (!odCurve.length) {
+      doc.setTextColor(37, 99, 235);
+      doc.setFontSize(6);
+      doc.text("OD " + odPct + "%", originX + width - pad.right - 12, originY + pad.top + 6, { align: "right" });
+    }
+    if (!oiCurve.length) {
+      doc.setTextColor(20, 184, 166);
+      doc.text("OI " + oiPct + "%", originX + width - pad.right - 12, originY + pad.top + 12, { align: "right" });
+    }
+  },
+
+  _dibujarResumenLogoPDF(doc, logoResultados, originX, originY, width, height) {
+    const odPct = Classifications.calcularDiscriminacion(logoResultados.OD) ?? 0;
+    const oiPct = Classifications.calcularDiscriminacion(logoResultados.OI) ?? 0;
+    const pad = { left: 16, right: 12, top: 8, bottom: 14 };
+    const chartW = width - pad.left - pad.right;
+    const chartH = height - pad.top - pad.bottom;
+    const barWidth = 32;
+    const positions = [
+      { x: originX + pad.left + 10, label: "OD", value: odPct, color: [37, 99, 235] },
+      { x: originX + pad.left + 10 + 60, label: "OI", value: oiPct, color: [20, 184, 166] }
+    ];
+
+    doc.setDrawColor(148, 163, 184);
+    doc.setLineWidth(0.3);
+    doc.line(originX + pad.left, originY + pad.top, originX + pad.left, originY + height - pad.bottom);
+    doc.line(originX + pad.left, originY + height - pad.bottom, originX + width - pad.right, originY + height - pad.bottom);
+
+    [0, 20, 40, 60, 80, 100].forEach(value => {
+      const yy = originY + height - pad.bottom - (value / 100) * chartH;
+      doc.setDrawColor(226, 232, 240);
+      doc.line(originX + pad.left, yy, originX + width - pad.right, yy);
+      doc.setTextColor(100, 116, 139);
+      doc.setFontSize(5.5);
+      doc.text(String(value), originX + 2, yy + 1.5);
+    });
+
+    positions.forEach(item => {
+      const barHeight = (item.value / 100) * chartH;
+      const y = originY + height - pad.bottom - barHeight;
+      doc.setFillColor(...item.color);
+      doc.roundedRect(item.x, y, barWidth, barHeight, 2, 2, "F");
+      doc.setTextColor(...item.color);
+      doc.setFontSize(6);
+      doc.setFont("helvetica", "bold");
+      doc.text(item.label + " " + item.value + "%", item.x + barWidth / 2, y - 3, { align: "center" });
+    });
   },
 
   /**
