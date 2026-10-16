@@ -64,6 +64,10 @@ const Audio = {
     return Math.min(1, Math.max(0.05, 0.05 + ((db + 10) / 130) * 0.95));
   },
 
+  logarithmicVolumeForDB(db) {
+    return Math.min(1, this.practicalVolumeForDB(40) * Math.pow(10, (db - 40) / 20));
+  },
+
   /**
    * Emite un tono puro con duración de 1 segundo
    */
@@ -83,7 +87,7 @@ const Audio = {
     // Tono principal (sine wave)
     const gainMain = ctx.createGain();
     const osc = ctx.createOscillator();
-    const amp = this.practicalVolumeForDB(db);
+    const amp = this.logarithmicVolumeForDB(db);
 
     // Envelope: fade in, mantén, fade out
     gainMain.gain.setValueAtTime(0, ctx.currentTime);
@@ -219,7 +223,7 @@ const Audio = {
     src.buffer = audioBuffer;
 
     const gain = ctx.createGain();
-    const amp = this.practicalVolumeForDB(State.dB);
+    const amp = this.logarithmicVolumeForDB(State.dB);
     gain.gain.setValueAtTime(amp, ctx.currentTime);
 
     src.connect(gain);
@@ -245,7 +249,7 @@ const Audio = {
       const utterance = new SpeechSynthesisUtterance(palabra);
       utterance.lang = "es-ES";
       utterance.rate = 0.85;
-      utterance.volume = this.practicalVolumeForDB(State.dB);
+      utterance.volume = this.logarithmicVolumeForDB(State.dB);
       utterance.onend = () => resolve();
       utterance.onerror = () => resolve();
       window.speechSynthesis.speak(utterance);
