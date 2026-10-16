@@ -374,7 +374,7 @@ const PDF = {
       doc.setTextColor(140, 150, 170);
       doc.setFontSize(7);
       doc.setFont("helvetica", "normal");
-      doc.text("Audiómetro Clínico Pro · Solo referencia clínica · Usar auriculares calibrados", W / 2, 292, { align: "center" });
+      doc.text("Audiómetro Clínico Pro · Niveles no calibrados en dB HL · Solo referencia clínica", W / 2, 292, { align: "center" });
       doc.text(`Página ${i} de ${totalPages}`, W - mr, 292, { align: "right" });
     }
 
